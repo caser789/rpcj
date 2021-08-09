@@ -1,7 +1,10 @@
 package: github.com/caser789/rpcj
 import:
 - package: github.com/fatih/color
+- package: github.com/kavu/go_reuseport
+- package: github.com/marten-seemann/quic-conn
 - package: github.com/gogo/protobuf
   subpackages:
   - proto
 - package: github.com/vmihailenco/msgpack
+- package: github.com/xtaci/kcp-go

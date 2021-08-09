@@ -11,6 +11,7 @@ require (
 	github.com/marten-seemann/quic-conn v0.0.0-20191204020628-6e719687462b
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/rogpeppe/go-internal v1.3.0 // indirect
+	github.com/rubyist/circuitbreaker v2.2.1+incompatible
 	github.com/smallnest/rpcx v1.6.7 // indirect
 	github.com/vmihailenco/msgpack v4.0.4+incompatible
 	github.com/xtaci/kcp-go v5.4.20+incompatible

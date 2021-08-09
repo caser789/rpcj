@@ -1,5 +1,9 @@
+# github.com/cenk/backoff v2.2.1+incompatible
+github.com/cenk/backoff
 # github.com/cheekybits/genny v1.0.0
 github.com/cheekybits/genny/generic
+# github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a
+github.com/facebookgo/clock
 # github.com/fatih/color v1.12.0
 ## explicit
 github.com/fatih/color
@@ -50,6 +54,9 @@ github.com/mattn/go-isatty
 github.com/pkg/errors
 # github.com/rogpeppe/go-internal v1.3.0
 ## explicit
+# github.com/rubyist/circuitbreaker v2.2.1+incompatible
+## explicit
+github.com/rubyist/circuitbreaker
 # github.com/smallnest/rpcx v1.6.7
 ## explicit
 # github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161
