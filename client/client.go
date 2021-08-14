@@ -226,6 +226,15 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		}
 	}
 
+	if req.IsOneWay() {
+		client.mutex.Lock()
+		call = client.pending[seq]
+		delete(client.pending, seq)
+		client.mutex.Unlock()
+		if call != nil {
+			call.done()
+		}
+	}
 }
 
 func (client *Client) input() {
