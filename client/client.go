@@ -15,7 +15,6 @@ import (
 	"github.com/caser789/rpcj/share"
 	"github.com/caser789/rpcj/util"
 	circuit "github.com/rubyist/circuitbreaker"
-	kcp "github.com/xtaci/kcp-go"
 )
 
 // CircuitBreaker is a default circuit breaker (RateBreaker(0.95, 100)).
@@ -44,7 +43,7 @@ type seqKey struct{}
 // Client represents a RPC client.
 type Client struct {
 	TLSConfig *tls.Config
-	Block     kcp.BlockCrypt
+	Block     interface{} // kcp.BlockCrypt
 
 	//ConnectTimeout sets timeout for dialing
 	ConnectTimeout time.Duration
@@ -226,7 +225,7 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		}
 	}
 
-	if req.IsOneWay() {
+	if req.IsOneway() {
 		client.mutex.Lock()
 		call = client.pending[seq]
 		delete(client.pending, seq)
