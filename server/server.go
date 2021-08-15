@@ -243,7 +243,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	ctx := context.WithValue(context.Background(), RemoteConnContextKey, conn)
 	r := bufio.NewReaderSize(conn, ReaderBuffsize)
-	w := bufio.NewWriterSize(conn, WriterBuffsize)
+	// w := bufio.NewWriterSize(conn, WriterBuffsize)
 
 	for {
 		t0 := time.Now()
@@ -272,8 +272,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 			s.Plugins.DoPreWriteResponse(ctx, req)
 			if !req.IsOneway() {
-				res.WriteTo(w)
-				w.Flush()
+				res.WriteTo(conn)
 			}
 			s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 		}()
@@ -299,8 +298,8 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 	res = req.Clone()
 	res.SetMessageType(protocol.Response)
 
-	serviceName := req.Metadata[protocol.ServicePath]
-	methodName := req.Metadata[protocol.ServiceMethod]
+	serviceName := req.ServicePath
+	methodName := req.ServiceMethod
 
 	s.serviceMapMu.RLock()
 	service := s.serviceMap[serviceName]
@@ -359,6 +358,9 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 
 func handleError(res *protocol.Message, err error) (*protocol.Message, error) {
 	res.SetMessageStatusType(protocol.Error)
+	if res.Metadata == nil {
+		res.Metadata = make(map[string]string)
+	}
 	res.Metadata[protocol.ServiceError] = err.Error()
 	return res, err
 }
