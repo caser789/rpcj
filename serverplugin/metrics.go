@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/caser789/rpcj/protocol"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
-	"github.com/caser789/rpcj/protocol"
 	influxdb "github.com/vrischmann/go-metrics-influxdb"
 )
 

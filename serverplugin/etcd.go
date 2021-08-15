@@ -44,10 +44,6 @@ func (p *EtcdRegisterPlugin) Start() error {
 	}
 	p.kv = kv
 
-	if p.BasePath[0] == '/' {
-		p.BasePath = p.BasePath[1:]
-	}
-
 	err = kv.Put(p.BasePath, []byte("rpcx_path"), &store.WriteOptions{IsDir: true})
 	if err != nil && !strings.Contains(err.Error(), "Not a file") {
 		log.Errorf("cannot create etcd path %s: %v", p.BasePath, err)
@@ -94,7 +90,7 @@ func (p *EtcdRegisterPlugin) HandleConnAccept(conn net.Conn) (net.Conn, bool) {
 
 // Register handles registering event.
 // this service is registered at BASE/serviceName/thisIpAddress node
-func (p *EtcdRegisterPlugin) Register(name string, rcvr interface{}, metadata ...string) (err error) {
+func (p *EtcdRegisterPlugin) Register(name string, rcvr interface{}, metadata string) (err error) {
 	if "" == strings.TrimSpace(name) {
 		err = errors.New("Register service `name` can't be empty")
 		return
@@ -110,9 +106,6 @@ func (p *EtcdRegisterPlugin) Register(name string, rcvr interface{}, metadata ..
 		p.kv = kv
 	}
 
-	if p.BasePath[0] == '/' {
-		p.BasePath = p.BasePath[1:]
-	}
 	err = p.kv.Put(p.BasePath, []byte("rpcx_path"), &store.WriteOptions{IsDir: true})
 	if err != nil && !strings.Contains(err.Error(), "Not a file") {
 		log.Errorf("cannot create etcd path %s: %v", p.BasePath, err)
