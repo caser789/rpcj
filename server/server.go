@@ -62,7 +62,9 @@ type Server struct {
 	inShutdown int32
 	onShutdown []func()
 
-	// BlockCrypt for kcp.BlockCrypt, QUICConfig for quic TlsConfig, etc.
+	// TLSConfig for creating tls tcp connection.
+	TLSConfig *tls.Config
+	// BlockCrypt for kcp.BlockCrypt
 	Options map[string]interface{}
 	// // use for KCP
 	// KCPConfig KCPConfig
@@ -81,16 +83,6 @@ func NewServer(options map[string]interface{}) *Server {
 		Plugins: &pluginContainer{},
 	}
 }
-
-// // KCPConfig is config of KCP.
-// type KCPConfig struct {
-// 	BlockCrypt kcp.BlockCrypt
-// }
-
-// // QUICConfig is config of QUIC.
-// type QUICConfig struct {
-// 	TlsConfig *tls.Config
-// }
 
 // Address returns listened address.
 func (s *Server) Address() net.Addr {
@@ -243,7 +235,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 	ctx := context.WithValue(context.Background(), RemoteConnContextKey, conn)
 	r := bufio.NewReaderSize(conn, ReaderBuffsize)
-	// w := bufio.NewWriterSize(conn, WriterBuffsize)
+	//w := bufio.NewWriterSize(conn, WriterBuffsize)
 
 	for {
 		t0 := time.Now()
@@ -272,7 +264,9 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 			s.Plugins.DoPreWriteResponse(ctx, req)
 			if !req.IsOneway() {
-				res.WriteTo(conn)
+				data := res.Encode()
+				conn.Write(data)
+				//res.WriteTo(conn)
 			}
 			s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 		}()
@@ -295,7 +289,9 @@ func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Me
 }
 
 func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res *protocol.Message, err error) {
+	// pool res?
 	res = req.Clone()
+
 	res.SetMessageType(protocol.Response)
 
 	serviceName := req.ServicePath
@@ -350,9 +346,11 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 		data, err := codec.Encode(replyv.Interface())
 		if err != nil {
 			return handleError(res, err)
+
 		}
 		res.Payload = data
 	}
+
 	return res, nil
 }
 
