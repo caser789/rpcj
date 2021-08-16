@@ -32,6 +32,7 @@ func NewEtcdDiscovery(basePath string, etcdAddr []string, options *store.Config)
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
+
 	return NewEtcdDiscoveryStore(basePath, kv)
 }
 
@@ -56,19 +57,19 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	return d
 }
 
-// GetServices returns the static server
+// GetServices returns the servers
 func (d EtcdDiscovery) GetServices() []*KVPair {
 	return d.pairs
 }
 
 // WatchService returns a nil chan.
-func (d EtcdDiscovery) WatchService() chan []*KVPair {
+func (d *EtcdDiscovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
 }
 
-func (d EtcdDiscovery) watch() {
+func (d *EtcdDiscovery) watch() {
 	c, err := d.kv.WatchTree(d.basePath, nil)
 	if err != nil {
 		log.Fatalf("can not watchtree: %s: %v", d.basePath, err)

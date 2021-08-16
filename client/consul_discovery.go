@@ -32,6 +32,7 @@ func NewConsulDiscovery(basePath string, consulAddr []string, options *store.Con
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
+
 	return NewConsulDiscoveryStore(basePath, kv)
 }
 
@@ -59,19 +60,19 @@ func NewConsulDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	return d
 }
 
-// GetServices returns the static server
+// GetServices returns the servers
 func (d ConsulDiscovery) GetServices() []*KVPair {
 	return d.pairs
 }
 
 // WatchService returns a nil chan.
-func (d ConsulDiscovery) WatchService() chan []*KVPair {
+func (d *ConsulDiscovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
 }
 
-func (d ConsulDiscovery) watch() {
+func (d *ConsulDiscovery) watch() {
 	c, err := d.kv.WatchTree(d.basePath, nil)
 	if err != nil {
 		log.Fatalf("can not watchtree: %s: %v", d.basePath, err)
