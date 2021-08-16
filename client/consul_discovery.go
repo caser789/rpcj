@@ -32,7 +32,11 @@ func NewConsulDiscovery(basePath string, consulAddr []string, options *store.Con
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
+	return NewConsulDiscoveryStore(basePath, kv)
+}
 
+// NewConsulDiscoveryStore returns a new ConsulDiscovery with specified store.
+func NewConsulDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	if basePath[0] == '/' {
 		basePath = basePath[1:]
 	}

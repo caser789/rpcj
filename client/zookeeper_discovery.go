@@ -31,7 +31,11 @@ func NewZookeeperDiscovery(basePath string, zkAddr []string, options *store.Conf
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
+	return NewZookeeperDiscoveryWithStore(basePath, kv)
+}
 
+// NewZookeeperDiscoveryWithStore returns a new ZookeeperDiscovery with specified store.
+func NewZookeeperDiscoveryWithStore(basePath string, kv store.Store) ServiceDiscovery {
 	if basePath[0] == '/' {
 		basePath = basePath[1:]
 	}
