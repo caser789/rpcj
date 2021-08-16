@@ -15,9 +15,9 @@ import (
 )
 
 type serviceMeta struct {
-	Service        string
-	Meta           string
-	ServiceAddress string
+	Service        string `json:"service,omitempty"`
+	Meta           string `json:"meta,omitempty"`
+	ServiceAddress string `json:"service_address,omitempty"`
 }
 
 // MDNSRegisterPlugin implements mdns/dns-sd registry.
@@ -31,41 +31,42 @@ type MDNSRegisterPlugin struct {
 	UpdateInterval time.Duration
 
 	server *zeroconf.Server
+	domain string
+}
+
+// NewMDNSRegisterPlugin return a new MDNSRegisterPlugin.
+// If domain is empty, use "local." in default.
+func NewMDNSRegisterPlugin(serviceAddress string, port int, m metrics.Registry, updateInterval time.Duration, domain string) *MDNSRegisterPlugin {
+	if domain == "" {
+		domain = "local."
+	}
+	return &MDNSRegisterPlugin{
+		ServiceAddress: serviceAddress,
+		port:           port,
+		Metrics:        m,
+		UpdateInterval: updateInterval,
+		domain:         domain,
+	}
 }
 
 // Start starts to connect etcd cluster
 func (p *MDNSRegisterPlugin) Start() error {
-	data, _ := json.Marshal(p.Services)
-	s := url.QueryEscape(string(data))
-	host, _ := os.Hostname()
 
-	addr := p.ServiceAddress
-	i := strings.Index(addr, "@")
-	if i > 0 {
-		addr = addr[i+1:]
+	if p.server == nil && len(p.Services) != 0 {
+		p.initMDNS()
 	}
-	_, portStr, err := net.SplitHostPort(addr)
-	if err != nil {
-		panic(err)
-	}
-	p.port, err = strconv.Atoi(portStr)
-	if err != nil {
-		panic(err)
-	}
-
-	server, err := zeroconf.Register(host, "_rpcxservices", "local.", p.port, []string{s}, nil)
-	if err != nil {
-		panic(err)
-	}
-	p.server = server
 
 	if p.UpdateInterval > 0 {
 		ticker := time.NewTicker(p.UpdateInterval)
 		go func() {
-			p.server.Shutdown()
+			defer p.server.Shutdown()
 
 			// refresh service TTL
 			for range ticker.C {
+				if p.server == nil && len(p.Services) == 0 {
+					continue
+				}
+
 				clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
 				data := []byte(strconv.FormatInt(clientMeter.Count()/60, 10))
 				//set this same metrics for all services at this server
@@ -84,6 +85,32 @@ func (p *MDNSRegisterPlugin) Start() error {
 	return nil
 }
 
+func (p *MDNSRegisterPlugin) initMDNS() {
+	data, _ := json.Marshal(p.Services)
+	s := url.QueryEscape(string(data))
+	host, _ := os.Hostname()
+
+	addr := p.ServiceAddress
+	i := strings.Index(addr, "@")
+	if i > 0 {
+		addr = addr[i+1:]
+	}
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		panic(err)
+	}
+	p.port, err = strconv.Atoi(portStr)
+	if err != nil {
+		panic(err)
+	}
+
+	server, err := zeroconf.Register(host, "_rpcxservices", p.domain, p.port, []string{s}, nil)
+	if err != nil {
+		panic(err)
+	}
+	p.server = server
+}
+
 // HandleConnAccept handles connections from clients
 func (p *MDNSRegisterPlugin) HandleConnAccept(conn net.Conn) (net.Conn, bool) {
 	if p.Metrics != nil {
@@ -100,9 +127,6 @@ func (p *MDNSRegisterPlugin) Register(name string, rcvr interface{}, metadata st
 		err = errors.New("Register service `name` can't be empty")
 		return
 	}
-	if p.server == nil {
-		return errors.New("MDNSRegisterPlugin has not started")
-	}
 
 	sm := &serviceMeta{
 		Service:        name,
@@ -111,6 +135,12 @@ func (p *MDNSRegisterPlugin) Register(name string, rcvr interface{}, metadata st
 	}
 
 	p.Services = append(p.Services, sm)
+
+	if p.server == nil {
+		p.initMDNS()
+		return
+	}
+
 	ss, _ := json.Marshal(p.Services)
 	s := url.QueryEscape(string(ss))
 	p.server.SetText([]string{s})
