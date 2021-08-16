@@ -1,5 +1,3 @@
-// +build consul
-
 package client
 
 import (
@@ -7,36 +5,22 @@ import (
 	"time"
 
 	"github.com/caser789/rpcj/log"
-	"github.com/docker/libkv"
 	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
 )
 
-func init() {
-	consul.Register()
-}
-
-// ConsulDiscovery is a consul service discovery.
-// It always returns the registered servers in consul.
-type ConsulDiscovery struct {
+// LibkvDiscovery is a libkv service discovery.
+// It always returns the registered servers in etcd.
+type LibkvDiscovery struct {
 	basePath string
 	kv       store.Store
 	pairs    []*KVPair
 	chans    []chan []*KVPair
 }
 
-// NewConsulDiscovery returns a new ConsulDiscovery.
-func NewConsulDiscovery(basePath string, consulAddr []string, options *store.Config) ServiceDiscovery {
-	kv, err := libkv.NewStore(store.CONSUL, consulAddr, options)
-	if err != nil {
-		log.Infof("cannot create store: %v", err)
-		panic(err)
-	}
-
-	if basePath[0] == '/' {
-		basePath = basePath[1:]
-	}
-	d := &ConsulDiscovery{basePath: basePath, kv: kv}
+// NewLibkvDiscovery returns a new LibkvDiscovery.
+// Must register the store before use it.
+func NewLibkvDiscovery(basePath string, kv store.Store) ServiceDiscovery {
+	d := &LibkvDiscovery{basePath: basePath, kv: kv}
 	go d.watch()
 
 	ps, err := kv.List(basePath)
@@ -55,19 +39,19 @@ func NewConsulDiscovery(basePath string, consulAddr []string, options *store.Con
 	return d
 }
 
-// GetServices returns the static server
-func (d ConsulDiscovery) GetServices() []*KVPair {
+// GetServices returns the servers
+func (d LibkvDiscovery) GetServices() []*KVPair {
 	return d.pairs
 }
 
 // WatchService returns a nil chan.
-func (d ConsulDiscovery) WatchService() chan []*KVPair {
+func (d LibkvDiscovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
 }
 
-func (d ConsulDiscovery) watch() {
+func (d LibkvDiscovery) watch() {
 	c, err := d.kv.WatchTree(d.basePath, nil)
 	if err != nil {
 		log.Fatalf("can not watchtree: %s: %v", d.basePath, err)
@@ -76,8 +60,10 @@ func (d ConsulDiscovery) watch() {
 
 	for ps := range c {
 		var pairs []*KVPair // latest servers
+		prefix := d.basePath + "/"
 		for _, p := range ps {
-			pairs = append(pairs, &KVPair{Key: p.Key, Value: string(p.Value)})
+			k := strings.TrimPrefix(p.Key, prefix)
+			pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 		}
 		d.pairs = pairs
 
