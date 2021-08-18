@@ -288,7 +288,6 @@ func (client *Client) send(ctx context.Context, call *Call) {
 	}
 
 	data := req.Encode()
-	protocol.FreeMsg(req)
 	_, err := client.Conn.Write(data)
 	if err != nil {
 		client.mutex.Lock()
@@ -300,6 +299,8 @@ func (client *Client) send(ctx context.Context, call *Call) {
 			call.done()
 		}
 	}
+
+	protocol.FreeMsg(req)
 
 	if req.IsOneway() {
 		client.mutex.Lock()
