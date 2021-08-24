@@ -114,13 +114,13 @@ func (d *ConsulDiscovery) watch() {
 			break
 		}
 
-        prefix := d.basePath + "/"
+		prefix := d.basePath + "/"
 
 		for ps := range c {
 			var pairs []*KVPair // latest servers
 			for _, p := range ps {
-                k := strings.TrimPrefix(p.Key, prefix)
-                pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
+				k := strings.TrimPrefix(p.Key, prefix)
+				pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 			}
 			d.pairs = pairs
 
