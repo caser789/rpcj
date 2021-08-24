@@ -3,6 +3,7 @@
 package client
 
 import (
+	"strings"
 	"time"
 
 	"github.com/caser789/rpcj/log"
@@ -29,6 +30,14 @@ type ZookeeperDiscovery struct {
 
 // NewZookeeperDiscovery returns a new ZookeeperDiscovery.
 func NewZookeeperDiscovery(basePath, servicePath string, zkAddr []string, options *store.Config) ServiceDiscovery {
+	if basePath[0] == '/' {
+		basePath = basePath[1:]
+	}
+
+	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
+		basePath = basePath[:len(basePath)-1]
+	}
+
 	kv, err := libkv.NewStore(store.ZK, zkAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
@@ -44,7 +53,6 @@ func NewZookeeperDiscoveryWithStore(basePath string, kv store.Store) ServiceDisc
 		basePath = basePath[1:]
 	}
 	d := &ZookeeperDiscovery{basePath: basePath, kv: kv}
-	go d.watch()
 
 	ps, err := kv.List(basePath)
 	if err != nil {
@@ -52,12 +60,14 @@ func NewZookeeperDiscoveryWithStore(basePath string, kv store.Store) ServiceDisc
 		panic(err)
 	}
 
-    var pairs = make([]*KVPair, 0, len(ps))
+	var pairs = make([]*KVPair, 0, len(ps))
 	for _, p := range ps {
 		pairs = append(pairs, &KVPair{Key: p.Key, Value: string(p.Value)})
 	}
 	d.pairs = pairs
 	d.RetriesAfterWatchFailed = -1
+	go d.watch()
+
 	return d
 }
 

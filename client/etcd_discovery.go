@@ -41,8 +41,10 @@ func NewEtcdDiscovery(basePath, servicePath string, etcdAddr []string, options *
 
 // NewEtcdDiscoveryStore return a new EtcdDiscovery with specified store.
 func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
+	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
+		basePath = basePath[:len(basePath)-1]
+	}
 	d := &EtcdDiscovery{basePath: basePath, kv: kv}
-	go d.watch()
 
 	ps, err := kv.List(basePath)
 	if err != nil {
@@ -50,7 +52,7 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 		panic(err)
 	}
 
-    var pairs = make([]*KVPair, 0, len(ps))
+	var pairs = make([]*KVPair, 0, len(ps))
 	prefix := d.basePath + "/"
 	for _, p := range ps {
 		k := strings.TrimPrefix(p.Key, prefix)
@@ -58,6 +60,7 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	}
 	d.pairs = pairs
 	d.RetriesAfterWatchFailed = -1
+	go d.watch()
 	return d
 }
 

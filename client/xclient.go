@@ -25,6 +25,7 @@ var (
 // One XClient is used only for one service. You should create multiple XClient for multiple services.
 type XClient interface {
 	SetPlugins(plugins PluginContainer)
+	SetSelector(s Selector)
 	ConfigGeoSelector(latitude, longitude float64)
 	Auth(auth string)
 
@@ -79,11 +80,6 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 		option:       option,
 	}
 
-	ch := client.discovery.WatchService()
-	if ch != nil {
-		go client.watch(ch)
-	}
-
 	servers := make(map[string]string)
 	pairs := discovery.GetServices()
 	for _, p := range pairs {
@@ -95,11 +91,21 @@ func NewXClient(servicePath string, failMode FailMode, selectMode SelectMode, di
 	}
 
 	client.Plugins = &pluginContainer{}
+
+	ch := client.discovery.WatchService()
+	if ch != nil {
+		go client.watch(ch)
+	}
+
 	return client
 }
 
 // SetSelector sets customized selector by users.
 func (c *xClient) SetSelector(s Selector) {
+	c.mu.RLock()
+	s.UpdateServer(c.servers)
+	c.mu.RUnlock()
+
 	c.selector = s
 }
 
@@ -112,6 +118,7 @@ func (c *xClient) SetPlugins(plugins PluginContainer) {
 // and use newGeoSelector.
 func (c *xClient) ConfigGeoSelector(latitude, longitude float64) {
 	c.selector = newGeoSelector(c.servers, latitude, longitude)
+	c.selectMode = Closest
 }
 
 // Auth sets s token for Authentication.
@@ -130,6 +137,10 @@ func (c *xClient) watch(ch chan []*KVPair) {
 		c.mu.Lock()
 		c.servers = servers
 		// TODO update other fields
+
+		if c.selector != nil {
+			c.selector.UpdateServer(servers)
+		}
 		c.mu.Unlock()
 	}
 }

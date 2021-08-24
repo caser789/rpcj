@@ -120,7 +120,7 @@ func (h *Header) SetVersion(v byte) {
 
 // MessageType returns the message type.
 func (h Header) MessageType() MessageType {
-	return MessageType(h[2] & 0x80) >> 7
+	return MessageType(h[2]&0x80) >> 7
 }
 
 // SetMessageType sets message type.
@@ -151,9 +151,9 @@ func (h Header) IsOneway() bool {
 // SetOneway sets the oneway flag.
 func (h *Header) SetOneway(oneway bool) {
 	if oneway {
-		h[2] = h[2] | 0x40
+		h[2] = h[2] | 0x20
 	} else {
-		h[2] = h[2] &^ 0x40
+		h[2] = h[2] &^ 0x20
 	}
 }
 
