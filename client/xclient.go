@@ -9,6 +9,7 @@ import (
 	"time"
 
 	ex "github.com/caser789/rpcj/errors"
+	"github.com/caser789/rpcj/protocol"
 	"github.com/caser789/rpcj/share"
 )
 
@@ -33,6 +34,7 @@ type XClient interface {
 	Call(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
 	Broadcast(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
 	Fork(ctx context.Context, serviceMethod string, args interface{}, reply interface{}) error
+	SendRaw(ctx context.Context, r *protocol.Message) (map[string]string, []byte, error)
 	Close() error
 }
 
@@ -137,11 +139,11 @@ func (c *xClient) watch(ch chan []*KVPair) {
 		}
 		c.mu.Lock()
 		c.servers = servers
-		// TODO update other fields
 
 		if c.selector != nil {
 			c.selector.UpdateServer(servers)
 		}
+
 		c.mu.Unlock()
 	}
 }
@@ -315,6 +317,80 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 	}
 }
 
+func (c *xClient) SendRaw(ctx context.Context, r *protocol.Message) (map[string]string, []byte, error) {
+	if c.isShutdown {
+		return nil, nil, ErrXClientShutdown
+	}
+
+	if c.auth != "" {
+		metadata := ctx.Value(share.ReqMetaDataKey)
+		if metadata == nil {
+			return nil, nil, errors.New("must set ReqMetaDataKey in context")
+		}
+		m := metadata.(map[string]string)
+		m[share.AuthKey] = c.auth
+	}
+
+	var err error
+	k, client, err := c.selectClient(ctx, r.ServicePath, r.ServiceMethod, r.Payload)
+	if err != nil {
+		if c.failMode == Failfast {
+			return nil, nil, err
+		}
+
+		if _, ok := err.(ServiceError); ok {
+			return nil, nil, err
+		}
+	}
+
+	switch c.failMode {
+	case Failtry:
+		retries := c.option.Retries
+		for retries > 0 {
+			retries--
+			m, payload, err := c.SendRaw(ctx, r)
+			if err == nil {
+				return m, payload, nil
+			}
+			if _, ok := err.(ServiceError); ok {
+				return nil, nil, err
+			}
+
+			c.removeClient(k, client)
+			client, _ = c.getCachedClient(k)
+		}
+		return nil, nil, err
+	case Failover:
+		retries := c.option.Retries
+		for retries > 0 {
+			retries--
+			m, payload, err := c.SendRaw(ctx, r)
+			if err == nil {
+				return m, payload, nil
+			}
+			if _, ok := err.(ServiceError); ok {
+				return nil, nil, err
+			}
+
+			c.removeClient(k, client)
+			//select another server
+			k, client, _ = c.selectClient(ctx, r.ServicePath, r.ServiceMethod, r.Payload)
+		}
+
+		return nil, nil, err
+
+	default: //Failfast
+		m, payload, err := c.SendRaw(ctx, r)
+
+		if err != nil {
+			if _, ok := err.(ServiceError); !ok {
+				c.removeClient(k, client)
+			}
+		}
+
+		return m, payload, nil
+	}
+}
 func (c *xClient) wrapCall(ctx context.Context, client RPCClient, serviceMethod string, args interface{}, reply interface{}) error {
 	if client == nil {
 		return ErrServerUnavailable
@@ -467,6 +543,7 @@ func (c *xClient) Close() error {
 		}
 
 		delete(c.cachedClient, k)
+
 	}
 	c.mu.Unlock()
 
