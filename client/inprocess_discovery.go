@@ -25,5 +25,6 @@ func (d InprocessDiscovery) WatchService() chan []*KVPair {
 	return nil
 }
 
-func (d InprocessDiscovery) RemoveWatcher(ch chan []*KVPair) {
-}
+func (d InprocessDiscovery) RemoveWatcher(ch chan []*KVPair) {}
+
+func (d *InprocessDiscovery) Close() {}
