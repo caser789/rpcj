@@ -4,6 +4,7 @@ package client
 
 import (
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/caser789/rpcj/log"
@@ -23,13 +24,14 @@ type ZookeeperDiscovery struct {
 	kv       store.Store
 	pairs    []*KVPair
 	chans    []chan []*KVPair
+	mu       sync.Mutex
 
 	// -1 means it always retry to watch until zookeeper is ok, 0 means no retry.
 	RetriesAfterWatchFailed int
 }
 
 // NewZookeeperDiscovery returns a new ZookeeperDiscovery.
-func NewZookeeperDiscovery(basePath, servicePath string, zkAddr []string, options *store.Config) ServiceDiscovery {
+func NewZookeeperDiscovery(basePath string, servicePath string, zkAddr []string, options *store.Config) ServiceDiscovery {
 	if basePath[0] == '/' {
 		basePath = basePath[1:]
 	}
@@ -88,6 +90,22 @@ func (d *ZookeeperDiscovery) WatchService() chan []*KVPair {
 	return ch
 }
 
+func (d *ZookeeperDiscovery) RemoveWatcher(ch chan []*KVPair) {
+	d.mu.Lock()
+	d.mu.Unlock()
+
+	var chans []chan []*KVPair
+	for _, c := range d.chans {
+		if c == ch {
+			continue
+		}
+
+		chans = append(chans, c)
+	}
+
+	d.chans = chans
+}
+
 func (d *ZookeeperDiscovery) watch() {
 	for {
 		var err error
@@ -130,6 +148,11 @@ func (d *ZookeeperDiscovery) watch() {
 			for _, ch := range d.chans {
 				ch := ch
 				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+
+						}
+					}()
 					select {
 					case ch <- pairs:
 					case <-time.After(time.Minute):

@@ -4,6 +4,7 @@ package client
 
 import (
 	"string"
+	"sync"
 	"time"
 
 	"github.com/caser789/rpcj/log"
@@ -23,13 +24,14 @@ type EtcdDiscovery struct {
 	kv       store.Store
 	pairs    []*KVPair
 	chans    []chan []*KVPair
+	mu       sync.Mutex
 
 	// -1 means it always retry to watch until zookeeper is ok, 0 means no retry.
 	RetriesAfterWatchFailed int
 }
 
 // NewEtcdDiscovery returns a new EtcdDiscovery.
-func NewEtcdDiscovery(basePath, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
+func NewEtcdDiscovery(basePath string, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
 	kv, err := libkv.NewStore(store.ETCD, etcdAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
@@ -44,14 +46,13 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
 		basePath = basePath[:len(basePath)-1]
 	}
-	d := &EtcdDiscovery{basePath: basePath, kv: kv}
 
+	d := &EtcdDiscovery{basePath: basePath, kv: kv}
 	ps, err := kv.List(basePath)
 	if err != nil {
 		log.Infof("cannot get services of from registry: %v", basePath, err)
 		panic(err)
 	}
-
 	var pairs = make([]*KVPair, 0, len(ps))
 	prefix := d.basePath + "/"
 	for _, p := range ps {
@@ -60,6 +61,7 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	}
 	d.pairs = pairs
 	d.RetriesAfterWatchFailed = -1
+
 	go d.watch()
 	return d
 }
@@ -79,6 +81,22 @@ func (d *EtcdDiscovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
+}
+
+func (d *EtcdDiscovery) RemoveWatcher(ch chan []*KVPair) {
+	d.mu.Lock()
+	d.mu.Unlock()
+
+	var chans []chan []*KVPair
+	for _, c := range d.chans {
+		if c == ch {
+			continue
+		}
+
+		chans = append(chans, c)
+	}
+
+	d.chans = chans
 }
 
 func (d *EtcdDiscovery) watch() {
@@ -121,6 +139,12 @@ func (d *EtcdDiscovery) watch() {
 			for _, ch := range d.chans {
 				ch := ch
 				go func() {
+					defer func() {
+						if r := recover(); r != nil {
+
+						}
+					}()
+
 					select {
 					case ch <- pairs:
 					case <-time.After(time.Minute):
