@@ -290,7 +290,7 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 			}
 
 			c.removeClient(k, client)
-			client, _ = c.getCachedClient(k)
+			client, err = c.getCachedClient(k)
 		}
 		return err
 	case Failover:
@@ -310,7 +310,7 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 
 			c.removeClient(k, client)
 			//select another server
-			k, client, _ = c.selectClient(ctx, c.servicePath, serviceMethod, args)
+			k, client, err = c.selectClient(ctx, c.servicePath, serviceMethod, args)
 		}
 
 		return err
@@ -370,7 +370,7 @@ func (c *xClient) SendRaw(ctx context.Context, r *protocol.Message) (map[string]
 			}
 
 			c.removeClient(k, client)
-			client, _ = c.getCachedClient(k)
+			client, err = c.getCachedClient(k)
 		}
 		return nil, nil, err
 	case Failover:
@@ -389,7 +389,7 @@ func (c *xClient) SendRaw(ctx context.Context, r *protocol.Message) (map[string]
 
 			c.removeClient(k, client)
 			//select another server
-			k, client, _ = c.selectClient(ctx, r.ServicePath, r.ServiceMethod, r.Payload)
+			k, client, err = c.selectClient(ctx, r.ServicePath, r.ServiceMethod, r.Payload)
 		}
 
 		return nil, nil, err
