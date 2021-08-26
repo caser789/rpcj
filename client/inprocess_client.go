@@ -24,13 +24,23 @@ type inprocessClient struct {
 	services map[string]interface{}
 	sync.RWMutex
 
-	methods map[string]*reflect.Value
-	mmu     sync.RWMutex
+	methods           map[string]*reflect.Value
+	mmu               sync.RWMutex
+	ServerMessageChan chan<- *protocol.Message
 }
 
 // Connect do a fake operaton.
 func (client *inprocessClient) Connect(network, address string) error {
 	return nil
+}
+
+func (client *inprocessClient) RegisterServerMessageChan(ch chan<- *protocol.Message) {
+	client.ServerMessageChan = ch
+}
+
+// UnregisterServerMessageChan removes ServerMessageChan.
+func (client *inprocessClient) UnregisterServerMessageChan() {
+	client.ServerMessageChan = nil
 }
 
 // Go calls is not async. It still use sync to call.
