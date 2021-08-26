@@ -10,6 +10,8 @@ var makeListeners = make(map[string]MakeListener)
 
 func init() {
 	makeListeners["tcp"] = tcpMakeListener
+	makeListeners["tcp4"] = tcp4MakeListener
+	makeListeners["tcp6"] = tcp6MakeListener
 	makeListeners["http"] = tcpMakeListener
 }
 
@@ -36,6 +38,26 @@ func tcpMakeListener(s *Server, address string) (ln net.Listener, err error) {
 		ln, err = net.Listen("tcp", address)
 	} else {
 		ln, err = tls.Listen("tcp", address, s.tlsConfig)
+	}
+
+	return ln, err
+}
+
+func tcp4MakeListener(s *Server, address string) (ln net.Listener, err error) {
+	if s.tlsConfig == nil {
+		ln, err = net.Listen("tcp4", address)
+	} else {
+		ln, err = tls.Listen("tcp4", address, s.tlsConfig)
+	}
+
+	return ln, err
+}
+
+func tcp6MakeListener(s *Server, address string) (ln net.Listener, err error) {
+	if s.tlsConfig == nil {
+		ln, err = net.Listen("tcp6", address)
+	} else {
+		ln, err = tls.Listen("tcp6", address, s.tlsConfig)
 	}
 
 	return ln, err
