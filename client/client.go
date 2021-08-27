@@ -16,7 +16,6 @@ import (
 	"github.com/caser789/rpcj/log"
 	"github.com/caser789/rpcj/protocol"
 	"github.com/caser789/rpcj/share"
-	"github.com/caser789/rpcj/util"
 	circuit "github.com/rubyist/circuitbreaker"
 )
 
@@ -275,8 +274,21 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 	call.ServicePath = r.ServicePath
 	call.ServiceMethod = r.ServiceMethod
 	meta := ctx.Value(share.ReqMetaDataKey)
+
+	rmeta := make(map[string]string)
+	if meta != nil {
+		for k, v := range meta.(map[string]string) {
+			rmeta[k] = v
+		}
+	}
+	if r.Metadata != nil {
+		for k, v := range r.Metadata {
+			rmeta[k] = v
+		}
+	}
+
 	if meta != nil { //copy meta in context to meta in requests
-		call.Metadata = meta.(map[string]string)
+		call.Metadata = rmeta
 	}
 	done := make(chan *Call, 10)
 	call.Done = done
@@ -300,6 +312,7 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 			call.Error = err
 			call.done()
 		}
+		return nil, nil, err
 	}
 	if r.IsOneway() {
 		client.mutex.Lock()
@@ -309,6 +322,7 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 		if call != nil {
 			call.done()
 		}
+		return nil, nil, nil
 	}
 
 	var m map[string]string
@@ -415,6 +429,10 @@ func (client *Client) send(ctx context.Context, call *Call) {
 	req := protocol.GetPooledMsg()
 	req.SetMessageType(protocol.Request)
 	req.SetSeq(seq)
+	if call.Reply == nil {
+		req.SetOneway(true)
+	}
+
 	// heartbeat
 	if call.ServicePath == "" && call.ServiceMethod == "" {
 		req.SetHeartbeat(true)
@@ -433,14 +451,7 @@ func (client *Client) send(ctx context.Context, call *Call) {
 			call.done()
 			return
 		}
-		if len(data) > 1024 && client.option.CompressType == protocol.Gzip {
-			data, err = util.Zip(data)
-			if err != nil {
-				call.Error = err
-				call.done()
-				return
-			}
-
+		if len(data) > 1024 && client.option.CompressType != protocol.None {
 			req.SetCompressType(client.option.CompressType)
 		}
 
@@ -459,6 +470,7 @@ func (client *Client) send(ctx context.Context, call *Call) {
 			call.Error = err
 			call.done()
 		}
+		return
 	}
 
 	isOneway := req.IsOneway()
@@ -474,6 +486,10 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		}
 	}
 
+	if client.option.WriteTimeout != 0 {
+		client.Conn.SetWriteDeadline(time.Now().Add(client.option.WriteTimeout))
+	}
+
 }
 
 func (client *Client) input() {
@@ -481,6 +497,10 @@ func (client *Client) input() {
 	var res = protocol.NewMessage()
 
 	for err == nil {
+		if client.option.ReadTimeout != 0 {
+			client.Conn.SetReadDeadline(time.Now().Add(client.option.ReadTimeout))
+		}
+
 		err = res.Decode(client.r)
 		//res, err = protocol.Read(client.r)
 
@@ -502,6 +522,7 @@ func (client *Client) input() {
 			if isServerMessage {
 				if client.ServerMessageChan != nil {
 					go client.handleServerRequest(res)
+					res = protocol.NewMessage()
 				}
 				continue
 			}
@@ -521,13 +542,6 @@ func (client *Client) input() {
 			} else {
 				data := res.Payload
 				if len(data) > 0 {
-					if res.CompressType() == protocol.Gzip {
-						data, err = util.Unzip(data)
-						if err != nil {
-							call.Error = ServiceError("unzip payload: " + err.Error())
-						}
-					}
-
 					codec := share.Codecs[res.SerializeType()]
 					if codec == nil {
 						call.Error = ServiceError(ErrUnsupportedCodec.Error())

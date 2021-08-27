@@ -229,7 +229,7 @@ func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 	//double check
 	c.mu.Lock()
 	client = c.cachedClient[k]
-	if client == nil {
+	if client == nil || client.IsShutdown() {
 		network, addr := splitNetworkAndAddress(k)
 		if network == "inprocess" {
 			client = InprocessClient
@@ -407,8 +407,13 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 		defer cancelFn()
 		call1 := make(chan *Call, 10)
 		call2 := make(chan *Call, 10)
-		reply1 := reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
-		reply2 := reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+
+		var reply1, reply2 interface{}
+
+		if reply != nil {
+			reply1 = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+			reply2 = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+		}
 
 		_, err1 := c.Go(ctx, serviceMethod, args, reply1, call1)
 
@@ -419,7 +424,7 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 			return err
 		case call := <-call1:
 			err = call.Error
-			if err == nil {
+			if err == nil && reply != nil {
 				reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(reply1).Elem())
 			}
 			return err
@@ -440,12 +445,12 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 			err = ctx.Err()
 		case call := <-call1:
 			err = call.Error
-			if err == nil {
+			if err == nil && reply != nil && reply1 != nil {
 				reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(reply1).Elem())
 			}
 		case call := <-call2:
 			err = call.Error
-			if err == nil {
+			if err == nil && reply != nil && reply2 != nil {
 				reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(reply2).Elem())
 			}
 		}
@@ -569,7 +574,7 @@ func (c *xClient) Broadcast(ctx context.Context, serviceMethod string, args inte
 		m[share.AuthKey] = c.auth
 	}
 
-	var clients []RPCClient
+	var clients = make(map[string]RPCClient)
 	c.mu.RLock()
 	for k := range c.servers {
 		client, err := c.getCachedClientWithoutLock(k)
@@ -577,7 +582,7 @@ func (c *xClient) Broadcast(ctx context.Context, serviceMethod string, args inte
 			c.mu.RUnlock()
 			return err
 		}
-		clients = append(clients, client)
+		clients[k] = client
 	}
 	c.mu.RUnlock()
 
@@ -588,11 +593,15 @@ func (c *xClient) Broadcast(ctx context.Context, serviceMethod string, args inte
 	var err error
 	l := len(clients)
 	done := make(chan bool, l)
-	for _, client := range clients {
+	for k, client := range clients {
+		k := k
 		client := client
 		go func() {
 			err = c.wrapCall(ctx, client, serviceMethod, args, reply)
 			done <- (err == nil)
+			if err != nil {
+				c.removeClient(k, client)
+			}
 		}()
 	}
 
@@ -629,7 +638,7 @@ func (c *xClient) Fork(ctx context.Context, serviceMethod string, args interface
 		m[share.AuthKey] = c.auth
 	}
 
-	var clients []RPCClient
+	var clients = make(map[string]RPCClient)
 	c.mu.RLock()
 	for k := range c.servers {
 		client, err := c.getCachedClientWithoutLock(k)
@@ -637,10 +646,9 @@ func (c *xClient) Fork(ctx context.Context, serviceMethod string, args interface
 			c.mu.RUnlock()
 			return err
 		}
-		clients = append(clients, client)
+		clients[k] = client
 	}
 	c.mu.RUnlock()
-
 	if len(clients) == 0 {
 		return ErrXClientNoServer
 	}
@@ -648,15 +656,24 @@ func (c *xClient) Fork(ctx context.Context, serviceMethod string, args interface
 	var err error
 	l := len(clients)
 	done := make(chan bool, l)
-	for _, client := range clients {
+	for k, client := range clients {
+		k := k
 		client := client
 		go func() {
-			clonedReply := reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+			var clonedReply interface{}
+			if reply != nil {
+				clonedReply = reflect.New(reflect.ValueOf(reply).Elem().Type()).Interface()
+			}
+
 			err = c.wrapCall(ctx, client, serviceMethod, args, clonedReply)
-			done <- (err == nil)
-			if err == nil {
+			if err == nil && reply != nil && clonedReply != nil {
 				reflect.ValueOf(reply).Elem().Set(reflect.ValueOf(clonedReply).Elem())
 			}
+			done <- (err == nil)
+			if err != nil {
+				c.removeClient(k, client)
+			}
+
 		}()
 	}
 

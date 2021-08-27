@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"net/url"
+	"sort"
 	"strconv"
 	"time"
 
@@ -202,7 +203,7 @@ func (s *geoSelector) UpdateServer(servers map[string]string) {
 }
 
 func createGeoServer(servers map[string]string) []*geoServer {
-	var geoServers = make([]*geoServer, len(servers))
+	var geoServers = make([]*geoServer, 0, len(servers))
 
 	for s, metadata := range servers {
 		if v, err := url.ParseQuery(metadata); err == nil {
@@ -241,6 +242,7 @@ func newConsistentHashSelector(servers map[string]string) Selector {
 		ss = append(ss, k)
 	}
 
+	sort.Slice(ss, func(i, j int) bool { return ss[i] < ss[j] })
 	return &consistentHashSelector{servers: ss}
 }
 
@@ -259,6 +261,7 @@ func (s *consistentHashSelector) UpdateServer(servers map[string]string) {
 		ss = append(ss, k)
 	}
 
+	sort.Slice(ss, func(i, j int) bool { return ss[i] < ss[j] })
 	s.servers = ss
 }
 

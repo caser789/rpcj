@@ -318,6 +318,9 @@ func (s *Server) serveConn(conn net.Conn) {
 			if !req.IsOneway() {
 				res := req.Clone()
 				res.SetMessageType(protocol.Response)
+				if len(res.Payload) > 1024 && req.CompressType() != protocol.None {
+					res.SetCompressType(req.CompressType())
+				}
 				handleError(res, err)
 				data := res.Encode()
 				s.Plugins.DoPreWriteResponse(ctx, req, res)
@@ -361,7 +364,9 @@ func (s *Server) serveConn(conn net.Conn) {
 						}
 					}
 				}
-
+				if len(res.Payload) > 1024 && req.CompressType() != protocol.None {
+					res.SetCompressType(req.CompressType())
+				}
 				data := res.Encode()
 				conn.Write(data)
 				//res.WriteTo(conn)
@@ -375,11 +380,17 @@ func (s *Server) serveConn(conn net.Conn) {
 }
 
 func (s *Server) readRequest(ctx context.Context, r io.Reader) (req *protocol.Message, err error) {
-	s.Plugins.DoPreReadRequest(ctx)
+	err = s.Plugins.DoPreReadRequest(ctx)
+	if err != nil {
+		return nil, err
+	}
 	// pool req?
 	req = protocol.GetPooledMsg()
 	err = req.Decode(r)
-	s.Plugins.DoPostReadRequest(ctx, req, err)
+	perr := s.Plugins.DoPostReadRequest(ctx, req, err)
+	if err == nil {
+		err = perr
+	}
 	return req, err
 }
 
