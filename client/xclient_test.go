@@ -2,18 +2,49 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/caser789/rpcj/_testutils"
+	"github.com/caser789/rpcj/protocol"
 	"github.com/caser789/rpcj/server"
 	"github.com/caser789/rpcj/share"
-	"github.com/caser789/rpcj/protocol"
-	"github.com/caser789/rpcj/_testutils"
 )
+
+func TestLoop(t *testing.T) {
+	opt := Option{
+		Retries:        1,
+		RPCPath:        share.DefaultRPCPath,
+		ConnectTimeout: 10 * time.Second,
+		SerializeType:  protocol.Thrift,
+		CompressType:   protocol.None,
+		BackupLatency:  10 * time.Millisecond,
+	}
+
+	d := NewPeer2PeerDiscovery("tcp@127.0.0.1:8995", "desc=a test service")
+	xclient := NewXClient("Arith", Failtry, RandomSelect, d, opt)
+
+	defer xclient.Close()
+
+	tick := time.NewTicker(2 * time.Second)
+	for ti := range tick.C {
+		fmt.Println(ti)
+		args := testutils.ThriftArgs_{}
+		args.A = 200
+		args.B = 100
+		go func() {
+			reply := testutils.ThriftReply{}
+			err := xclient.Call(context.Background(), "ThriftMul", &args, &reply)
+			fmt.Println(reply.C, err)
+		}()
+	}
+
+}
 
 func TestXClient_Thrift(t *testing.T) {
 	opt := Option{
-		Retries:        3,
+		Retries:        1,
 		RPCPath:        share.DefaultRPCPath,
 		ConnectTimeout: 10 * time.Second,
 		SerializeType:  protocol.Thrift,
@@ -37,11 +68,11 @@ func TestXClient_Thrift(t *testing.T) {
 		t.Fatalf("failed to call: %v", err)
 	}
 
+	fmt.Println(reply.C)
 	if reply.C != 20000 {
 		t.Fatalf("expect 20000 but got %d", reply.C)
 	}
 }
-
 
 func TestXClient_IT(t *testing.T) {
 	s := server.NewServer()
