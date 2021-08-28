@@ -52,6 +52,8 @@ var (
 	StartRequestContextKey = &contextKey{"start-parse-request"}
 	// StartSendRequestContextKey records the start time
 	StartSendRequestContextKey = &contextKey{"start-send-request"}
+	// TagContextKey is used to record extra info in handling services. Its value is a map[string]interface{}
+	TagContextKey = &contextKey{"service-tag"}
 )
 
 // Server is rpcx server that use TCP or UDP.
@@ -131,7 +133,7 @@ func (s *Server) ActiveClientConn() []net.Conn {
 //
 // servicePath, serviceMethod, metadata can be set to zero values.
 func (s *Server) SendMessage(conn net.Conn, servicePath, serviceMethod string, metadata map[string]string, data []byte) error {
-	ctx := context.WithValue(context.Background(), StartSendRequestContextKey, time.Now().UnixNano())
+	ctx := share.WithValue(context.Background(), StartSendRequestContextKey, time.Now().UnixNano())
 	s.Plugins.DoPreWriteRequest(ctx)
 
 	req := protocol.GetPooledMsg()
@@ -344,7 +346,8 @@ func (s *Server) serveConn(conn net.Conn) {
 			conn.SetReadDeadline(t0.Add(s.readTimeout))
 		}
 
-		ctx := context.WithValue(context.Background(), RemoteConnContextKey, conn)
+		ctx := share.WithValue(context.Background(), RemoteConnContextKey, conn)
+
 		req, err := s.readRequest(ctx, r)
 		if err != nil {
 			if err == io.EOF {
@@ -361,10 +364,11 @@ func (s *Server) serveConn(conn net.Conn) {
 			conn.SetWriteDeadline(t0.Add(s.writeTimeout))
 		}
 
-		ctx = context.WithValue(ctx, StartRequestContextKey, time.Now().UnixNano())
+		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
 		if !req.IsHeartbeat() {
 			err = s.auth(ctx, req)
 		}
+
 		if err != nil {
 			if !req.IsOneway() {
 				res := req.Clone()
@@ -398,8 +402,10 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 
 			resMetadata := make(map[string]string)
-			newCtx := context.WithValue(context.WithValue(ctx, share.ReqMetaDataKey, req.Metadata),
+			newCtx := share.WithLocalValue(share.WithLocalValue(ctx, share.ReqMetaDataKey, req.Metadata),
 				share.ResMetaDataKey, resMetadata)
+
+			s.Plugins.DoPreHandleRequest(newCtx, req)
 
 			res, err := s.handleRequest(newCtx, req)
 
