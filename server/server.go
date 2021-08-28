@@ -56,9 +56,10 @@ var (
 
 // Server is rpcx server that use TCP or UDP.
 type Server struct {
-	ln           net.Listener
-	readTimeout  time.Duration
-	writeTimeout time.Duration
+	ln                net.Listener
+	readTimeout       time.Duration
+	writeTimeout      time.Duration
+	gatewayHTTPServer *http.Server
 
 	serviceMapMu sync.RWMutex
 	serviceMap   map[string]*service
@@ -639,13 +640,13 @@ func (s *Server) RegisterOnShutdown(f func(s *Server)) {
 
 var shutdownPollInterval = 1000 * time.Millisecond
 
-// // Shutdown gracefully shuts down the server without interrupting any
-// // active connections. Shutdown works by first closing the
-// // listener, then closing all idle connections, and then waiting
-// // indefinitely for connections to return to idle and then shut down.
-// // If the provided context expires before the shutdown is complete,
-// // Shutdown returns the context's error, otherwise it returns any
-// // error returned from closing the Server's underlying Listener.
+// Shutdown gracefully shuts down the server without interrupting any
+// active connections. Shutdown works by first closing the
+// listener, then closing all idle connections, and then waiting
+// indefinitely for connections to return to idle and then shut down.
+// If the provided context expires before the shutdown is complete,
+// Shutdown returns the context's error, otherwise it returns any
+// error returned from closing the Server's underlying Listener.
 func (s *Server) Shutdown(ctx context.Context) error {
 	if atomic.CompareAndSwapInt32(&s.inShutdown, 0, 1) {
 		log.Info("shutdown begin")
@@ -662,6 +663,14 @@ func (s *Server) Shutdown(ctx context.Context) error {
 			}
 		}
 		s.Close()
+
+		if s.gatewayHTTPServer != nil {
+			if err := s.closeHTTP1APIGateway(ctx); err != nil {
+				log.Warnf("failed to close gateway: %v", err)
+			} else {
+				log.Info("closed gateway")
+			}
+		}
 		log.Info("shutdown end")
 	}
 	return nil
