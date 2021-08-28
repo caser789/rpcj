@@ -31,6 +31,10 @@ type Logger interface {
 	Panicf(format string, v ...interface{})
 }
 
+type Handler interface {
+	Handle(v ...interface{})
+}
+
 func SetLogger(logger Logger) {
 	l = logger
 }
@@ -63,6 +67,7 @@ func Warnf(format string, v ...interface{}) {
 func Error(v ...interface{}) {
 	l.Error(v...)
 }
+
 func Errorf(format string, v ...interface{}) {
 	l.Errorf(format, v...)
 }
@@ -70,6 +75,7 @@ func Errorf(format string, v ...interface{}) {
 func Fatal(v ...interface{}) {
 	l.Fatal(v...)
 }
+
 func Fatalf(format string, v ...interface{}) {
 	l.Fatalf(format, v...)
 }
@@ -77,6 +83,13 @@ func Fatalf(format string, v ...interface{}) {
 func Panic(v ...interface{}) {
 	l.Panic(v...)
 }
+
 func Panicf(format string, v ...interface{}) {
 	l.Panicf(format, v...)
+}
+
+func Handle(v ...interface{}) {
+	if handle, ok := l.(Handler); ok {
+		handle.Handle(v...)
+	}
 }
