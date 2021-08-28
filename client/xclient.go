@@ -229,6 +229,8 @@ func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 			c.mu.RUnlock()
 			return client, nil
 		}
+		delete(c.cachedClient, k)
+		client.Close()
 	}
 	c.mu.RUnlock()
 
