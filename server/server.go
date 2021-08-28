@@ -113,6 +113,15 @@ func (s *Server) Address() net.Addr {
 	return s.ln.Addr()
 }
 
+func (s *Server) ActiveClientConn() []net.Conn {
+	var result []net.Conn
+
+	for clientConn, _ := range s.activeConn {
+		result = append(result, clientConn)
+	}
+	return result
+}
+
 // SendMessage a request to the specified client.
 // The client is designated by the conn.
 // conn can be gotten from context in services:
@@ -352,7 +361,9 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 
 		ctx = context.WithValue(ctx, StartRequestContextKey, time.Now().UnixNano())
-		err = s.auth(ctx, req)
+		if !req.IsHeartbeat() {
+			err = s.auth(ctx, req)
+		}
 		if err != nil {
 			if !req.IsOneway() {
 				res := req.Clone()
