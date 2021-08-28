@@ -33,5 +33,7 @@ func TestConsulRegistry(t *testing.T) {
 	if len(r.Services) != 1 {
 		t.Fatal("failed to register services in consul")
 	}
-
+	if err := r.Stop(); err != nil {
+		t.Fatal(err)
+	}
 }
