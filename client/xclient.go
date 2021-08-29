@@ -58,6 +58,11 @@ type KVPair struct {
 	Value string
 }
 
+// ServiceDiscoveryFilter can be used to filter services with customized logics.
+// Servers can register its services but clients can use the customized filter to select some services.
+// It returns true if ServiceDiscovery wants to use this service, otherwise it returns false.
+type ServiceDiscoveryFilter func(kvp *KVPair) bool
+
 // ServiceDiscovery defines ServiceDiscovery of zookeeper, etcd and consul
 type ServiceDiscovery interface {
 	GetServices() []*KVPair
@@ -65,6 +70,7 @@ type ServiceDiscovery interface {
 	RemoveWatcher(ch chan []*KVPair)
 	Clone(servicePath string) ServiceDiscovery
 	Close()
+	SetFilter(ServiceDiscoveryFilter)
 }
 
 type xClient struct {

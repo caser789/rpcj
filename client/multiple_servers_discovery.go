@@ -27,6 +27,10 @@ func (d MultipleServersDiscovery) Clone(servicePath string) ServiceDiscovery {
 	return &d
 }
 
+// SetFilter sets the filer.
+func (d MultipleServersDiscovery) SetFilter(filter ServiceDiscoveryFilter) {
+}
+
 // GetServices returns the configured server
 func (d MultipleServersDiscovery) GetServices() []*KVPair {
 	return d.pairs
