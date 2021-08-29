@@ -520,6 +520,9 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		req.Payload = data
 	}
 
+	if client.Plugins != nil {
+		client.Plugins.DoClientBeforeEncode(req)
+	}
 	data := req.Encode()
 
 	_, err := client.Conn.Write(data)
@@ -702,6 +705,7 @@ func (client *Client) heartbeat() {
 
 	for range t.C {
 		if client.shutdown || client.closing {
+			t.Stop()
 			return
 		}
 
