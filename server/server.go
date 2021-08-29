@@ -537,6 +537,8 @@ func (s *Server) handleRequest(ctx context.Context, req *protocol.Message) (res 
 
 		}
 		res.Payload = data
+	} else if replyv != nil {
+		argsReplyPools.Put(mtype.ReplyType, replyv)
 	}
 
 	return res, nil
@@ -594,6 +596,8 @@ func (s *Server) handleRequestForFunction(ctx context.Context, req *protocol.Mes
 
 		}
 		res.Payload = data
+	} else if replyv != nil {
+		argsReplyPools.Put(mtype.ReplyType, replyv)
 	}
 
 	return res, nil
