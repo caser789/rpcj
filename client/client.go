@@ -342,11 +342,14 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 	meta := ctx.Value(share.ReqMetaDataKey)
 
 	rmeta := make(map[string]string)
+
+	// copy meta to rmeta
 	if meta != nil {
 		for k, v := range meta.(map[string]string) {
 			rmeta[k] = v
 		}
 	}
+	// copy r.Metadata to rmeta
 	if r.Metadata != nil {
 		for k, v := range r.Metadata {
 			rmeta[k] = v
@@ -357,6 +360,7 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 		call.Metadata = rmeta
 	}
 	r.Metadata = rmeta
+
 	done := make(chan *Call, 10)
 	call.Done = done
 
@@ -564,21 +568,21 @@ func (client *Client) send(ctx context.Context, call *Call) {
 
 func (client *Client) input() {
 	var err error
-	var res = protocol.NewMessage()
 
 	for err == nil {
+		var res = protocol.NewMessage()
 		if client.option.ReadTimeout != 0 {
 			client.Conn.SetReadDeadline(time.Now().Add(client.option.ReadTimeout))
 		}
 
 		err = res.Decode(client.r)
-
 		if err != nil {
 			break
 		}
 		if client.Plugins != nil {
 			client.Plugins.DoClientAfterDecode(res)
 		}
+
 		seq := res.Seq()
 		var call *Call
 		isServerMessage := (res.MessageType() == protocol.Request && !res.IsHeartbeat() && res.IsOneway())
@@ -594,19 +598,14 @@ func (client *Client) input() {
 			if isServerMessage {
 				if client.ServerMessageChan != nil {
 					go client.handleServerRequest(res)
-					res = protocol.NewMessage()
 				}
 				continue
 			}
 		case res.MessageStatusType() == protocol.Error:
 			// We've got an error response. Give this to the request
 			if len(res.Metadata) > 0 {
-				meta := make(map[string]string, len(res.Metadata))
-				for k, v := range res.Metadata {
-					meta[k] = v
-				}
-				call.ResMetadata = meta
-				call.Error = ServiceError(meta[protocol.ServiceError])
+				call.ResMetadata = res.Metadata
+				call.Error = ServiceError(res.Metadata[protocol.ServiceError])
 			}
 
 			if call.Raw {
@@ -631,10 +630,6 @@ func (client *Client) input() {
 					}
 				}
 				if len(res.Metadata) > 0 {
-					meta := make(map[string]string, len(res.Metadata))
-					for k, v := range res.Metadata {
-						meta[k] = v
-					}
 					call.ResMetadata = res.Metadata
 				}
 
@@ -642,8 +637,6 @@ func (client *Client) input() {
 
 			call.done()
 		}
-
-		res.Reset()
 	}
 	// Terminate pending calls.
 
