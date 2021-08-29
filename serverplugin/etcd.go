@@ -203,6 +203,10 @@ func (p *EtcdRegisterPlugin) Register(name string, rcvr interface{}, metadata st
 	return
 }
 
+func (p *EtcdRegisterPlugin) RegisterFunction(serviceName, fname string, fn interface{}, metadata string) error {
+	return p.Register(serviceName, fn, metadata)
+}
+
 func (p *EtcdRegisterPlugin) Unregister(name string) (err error) {
 	if "" == strings.TrimSpace(name) {
 		err = errors.New("Register service `name` can't be empty")

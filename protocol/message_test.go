@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
@@ -35,7 +36,7 @@ func TestMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	fmt.Println(buf.Bytes())
 	res, err := Read(&buf)
 	if err != nil {
 		t.Fatal(err)
