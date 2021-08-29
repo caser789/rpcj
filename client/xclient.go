@@ -38,6 +38,7 @@ var (
 type XClient interface {
 	SetPlugins(plugins PluginContainer)
 	SetSelector(s Selector)
+	GetPlugins() PluginContainer
 	ConfigGeoSelector(latitude, longitude float64)
 	Auth(auth string)
 
@@ -171,6 +172,10 @@ func (c *xClient) SetSelector(s Selector) {
 // SetPlugins sets client's plugins.
 func (c *xClient) SetPlugins(plugins PluginContainer) {
 	c.Plugins = plugins
+}
+
+func (c *xClient) GetPlugins() PluginContainer {
+	return c.Plugins
 }
 
 // ConfigGeoSelector sets location of client's latitude and longitude,
