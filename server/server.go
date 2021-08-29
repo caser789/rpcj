@@ -367,8 +367,10 @@ func (s *Server) serveConn(conn net.Conn) {
 		}
 
 		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
+		var closeConn = false
 		if !req.IsHeartbeat() {
 			err = s.auth(ctx, req)
+			closeConn = err != nil
 		}
 
 		if err != nil {
@@ -389,6 +391,11 @@ func (s *Server) serveConn(conn net.Conn) {
 				s.Plugins.DoPreWriteResponse(ctx, req, nil)
 			}
 			protocol.FreeMsg(req)
+			// auth failed, closed the connection
+			if closeConn {
+				log.Info("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
+				return
+			}
 			continue
 		}
 		go func() {
