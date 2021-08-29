@@ -3,23 +3,23 @@
 package client
 
 import (
-	"string"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/caser789/rpcj/log"
 	"github.com/docker/libkv"
 	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/etcd"
+	etcd "github.com/smallnest/libkv-etcdv3-store"
 )
 
 func init() {
 	etcd.Register()
 }
 
-// EtcdDiscovery is a etcd service discovery.
+// EtcdV3Discovery is a etcd service discovery.
 // It always returns the registered servers in etcd.
-type EtcdDiscovery struct {
+type EtcdV3Discovery struct {
 	basePath string
 	kv       store.Store
 	pairs    []*KVPair
@@ -32,24 +32,24 @@ type EtcdDiscovery struct {
 	stopCh chan struct{}
 }
 
-// NewEtcdDiscovery returns a new EtcdDiscovery.
-func NewEtcdDiscovery(basePath string, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
-	kv, err := libkv.NewStore(store.ETCD, etcdAddr, options)
+// NewEtcdV3Discovery returns a new EtcdV3Discovery.
+func NewEtcdV3Discovery(basePath string, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
+	kv, err := libkv.NewStore(etcd.ETCDV3, etcdAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
 
-	return NewEtcdDiscoveryStore(basePath+"/"+servicePath, kv)
+	return NewEtcdV3DiscoveryStore(basePath+"/"+servicePath, kv)
 }
 
-// NewEtcdDiscoveryStore return a new EtcdDiscovery with specified store.
-func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
+// NewEtcdV3DiscoveryStore return a new EtcdV3Discovery with specified store.
+func NewEtcdV3DiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
 		basePath = basePath[:len(basePath)-1]
 	}
 
-	d := &EtcdDiscovery{basePath: basePath, kv: kv}
+	d := &EtcdV3Discovery{basePath: basePath, kv: kv}
 	d.stopCh = make(chan struct{})
 
 	ps, err := kv.List(basePath)
@@ -75,6 +75,9 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 				}
 			}
 		}
+		if p.Key == prefix[:len(prefix)-1] {
+			continue
+		}
 		k := strings.TrimPrefix(p.Key, prefix)
 		pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 	}
@@ -85,8 +88,8 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	return d
 }
 
-// NewEtcdDiscoveryTemplate returns a new EtcdDiscovery template.
-func NewEtcdDiscoveryTemplate(basePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
+// NewEtcdV3DiscoveryTemplate returns a new EtcdV3Discovery template.
+func NewEtcdV3DiscoveryTemplate(basePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
 	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
 		basePath = basePath[:len(basePath)-1]
 	}
@@ -97,27 +100,27 @@ func NewEtcdDiscoveryTemplate(basePath string, etcdAddr []string, options *store
 		panic(err)
 	}
 
-	return &EtcdDiscovery{basePath: basePath, kv: kv}
+	return &EtcdV3Discovery{basePath: basePath, kv: kv}
 }
 
 // Clone clones this ServiceDiscovery with new servicePath.
-func (d EtcdDiscovery) Clone(servicePath string) ServiceDiscovery {
-	return NewEtcdDiscoveryStore(d.basePath+"/"+servicePath, d.kv)
+func (d EtcdV3Discovery) Clone(servicePath string) ServiceDiscovery {
+	return NewEtcdV3DiscoveryStore(d.basePath+"/"+servicePath, d.kv)
 }
 
 // GetServices returns the servers
-func (d EtcdDiscovery) GetServices() []*KVPair {
+func (d EtcdV3Discovery) GetServices() []*KVPair {
 	return d.pairs
 }
 
 // WatchService returns a nil chan.
-func (d *EtcdDiscovery) WatchService() chan []*KVPair {
+func (d *EtcdV3Discovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
 }
 
-func (d *EtcdDiscovery) RemoveWatcher(ch chan []*KVPair) {
+func (d *EtcdV3Discovery) RemoveWatcher(ch chan []*KVPair) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -133,7 +136,7 @@ func (d *EtcdDiscovery) RemoveWatcher(ch chan []*KVPair) {
 	d.chans = chans
 }
 
-func (d *EtcdDiscovery) watch() {
+func (d *EtcdV3Discovery) watch() {
 	for {
 		var err error
 		var c <-chan []*store.KVPair
@@ -194,6 +197,10 @@ func (d *EtcdDiscovery) watch() {
 							}
 						}
 					}
+					if p.Key == prefix[:len(prefix)-1] {
+						continue
+					}
+
 					k := strings.TrimPrefix(p.Key, prefix)
 					pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 				}
@@ -222,6 +229,6 @@ func (d *EtcdDiscovery) watch() {
 	}
 }
 
-func (d *EtcdDiscovery) Close() {
+func (d *EtcdV3Discovery) Close() {
 	close(d.stopCh)
 }

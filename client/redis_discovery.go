@@ -1,25 +1,25 @@
-// +build etcd
+// +build redis
 
 package client
 
 import (
-	"string"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/abronan/valkeyrie"
+	"github.com/abronan/valkeyrie/store"
+	"github.com/abronan/valkeyrie/store/redis"
 	"github.com/caser789/rpcj/log"
-	"github.com/docker/libkv"
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/etcd"
 )
 
 func init() {
-	etcd.Register()
+	redis.Register()
 }
 
-// EtcdDiscovery is a etcd service discovery.
+// RedisDiscovery is a etcd service discovery.
 // It always returns the registered servers in etcd.
-type EtcdDiscovery struct {
+type RedisDiscovery struct {
 	basePath string
 	kv       store.Store
 	pairs    []*KVPair
@@ -32,27 +32,27 @@ type EtcdDiscovery struct {
 	stopCh chan struct{}
 }
 
-// NewEtcdDiscovery returns a new EtcdDiscovery.
-func NewEtcdDiscovery(basePath string, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
-	kv, err := libkv.NewStore(store.ETCD, etcdAddr, options)
+// NewRedisDiscovery returns a new RedisDiscovery.
+func NewRedisDiscovery(basePath string, servicePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
+	kv, err := valkeyrie.NewStore(store.REDIS, etcdAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
 
-	return NewEtcdDiscoveryStore(basePath+"/"+servicePath, kv)
+	return NewRedisDiscoveryStore(basePath+"/"+servicePath, kv)
 }
 
-// NewEtcdDiscoveryStore return a new EtcdDiscovery with specified store.
-func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
+// NewRedisDiscoveryStore return a new RedisDiscovery with specified store.
+func NewRedisDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
 		basePath = basePath[:len(basePath)-1]
 	}
 
-	d := &EtcdDiscovery{basePath: basePath, kv: kv}
+	d := &RedisDiscovery{basePath: basePath, kv: kv}
 	d.stopCh = make(chan struct{})
 
-	ps, err := kv.List(basePath)
+	ps, err := kv.List(basePath, nil)
 	if err != nil {
 		log.Infof("cannot get services of from registry: %v, err: %v", basePath, err)
 		panic(err)
@@ -75,6 +75,9 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 				}
 			}
 		}
+		if p.Key == prefix[:len(prefix)-1] {
+			continue
+		}
 		k := strings.TrimPrefix(p.Key, prefix)
 		pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 	}
@@ -85,39 +88,39 @@ func NewEtcdDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	return d
 }
 
-// NewEtcdDiscoveryTemplate returns a new EtcdDiscovery template.
-func NewEtcdDiscoveryTemplate(basePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
+// NewRedisDiscoveryTemplate returns a new RedisDiscovery template.
+func NewRedisDiscoveryTemplate(basePath string, etcdAddr []string, options *store.Config) ServiceDiscovery {
 	if len(basePath) > 1 && strings.HasSuffix(basePath, "/") {
 		basePath = basePath[:len(basePath)-1]
 	}
 
-	kv, err := libkv.NewStore(store.ETCD, etcdAddr, options)
+	kv, err := valkeyrie.NewStore(store.ETCD, etcdAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
 		panic(err)
 	}
 
-	return &EtcdDiscovery{basePath: basePath, kv: kv}
+	return &RedisDiscovery{basePath: basePath, kv: kv}
 }
 
 // Clone clones this ServiceDiscovery with new servicePath.
-func (d EtcdDiscovery) Clone(servicePath string) ServiceDiscovery {
-	return NewEtcdDiscoveryStore(d.basePath+"/"+servicePath, d.kv)
+func (d RedisDiscovery) Clone(servicePath string) ServiceDiscovery {
+	return NewRedisDiscoveryStore(d.basePath+"/"+servicePath, d.kv)
 }
 
 // GetServices returns the servers
-func (d EtcdDiscovery) GetServices() []*KVPair {
+func (d RedisDiscovery) GetServices() []*KVPair {
 	return d.pairs
 }
 
 // WatchService returns a nil chan.
-func (d *EtcdDiscovery) WatchService() chan []*KVPair {
+func (d *RedisDiscovery) WatchService() chan []*KVPair {
 	ch := make(chan []*KVPair, 10)
 	d.chans = append(d.chans, ch)
 	return ch
 }
 
-func (d *EtcdDiscovery) RemoveWatcher(ch chan []*KVPair) {
+func (d *RedisDiscovery) RemoveWatcher(ch chan []*KVPair) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -133,7 +136,7 @@ func (d *EtcdDiscovery) RemoveWatcher(ch chan []*KVPair) {
 	d.chans = chans
 }
 
-func (d *EtcdDiscovery) watch() {
+func (d *RedisDiscovery) watch() {
 	for {
 		var err error
 		var c <-chan []*store.KVPair
@@ -141,7 +144,7 @@ func (d *EtcdDiscovery) watch() {
 
 		retry := d.RetriesAfterWatchFailed
 		for d.RetriesAfterWatchFailed == -1 || retry > 0 {
-			c, err = d.kv.WatchTree(d.basePath, nil)
+			c, err = d.kv.WatchTree(d.basePath, nil, nil)
 			if err != nil {
 				if d.RetriesAfterWatchFailed > 0 {
 					retry--
@@ -194,6 +197,10 @@ func (d *EtcdDiscovery) watch() {
 							}
 						}
 					}
+					if p.Key == prefix[:len(prefix)-1] {
+						continue
+					}
+
 					k := strings.TrimPrefix(p.Key, prefix)
 					pairs = append(pairs, &KVPair{Key: k, Value: string(p.Value)})
 				}
@@ -222,6 +229,6 @@ func (d *EtcdDiscovery) watch() {
 	}
 }
 
-func (d *EtcdDiscovery) Close() {
+func (d *RedisDiscovery) Close() {
 	close(d.stopCh)
 }

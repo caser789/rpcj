@@ -261,6 +261,7 @@ func (s *Server) serveListener(ln net.Listener) error {
 
 		conn, ok := s.Plugins.DoPostConnAccept(conn)
 		if !ok {
+			closeChannel(s, conn)
 			continue
 		}
 
