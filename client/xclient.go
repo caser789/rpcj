@@ -37,8 +37,8 @@ var (
 // One XClient is used only for one service. You should create multiple XClient for multiple services.
 type XClient interface {
 	SetPlugins(plugins PluginContainer)
-	SetSelector(s Selector)
 	GetPlugins() PluginContainer
+	SetSelector(s Selector)
 	ConfigGeoSelector(latitude, longitude float64)
 	Auth(auth string)
 
@@ -69,8 +69,8 @@ type ServiceDiscovery interface {
 	WatchService() chan []*KVPair
 	RemoveWatcher(ch chan []*KVPair)
 	Clone(servicePath string) ServiceDiscovery
-	Close()
 	SetFilter(ServiceDiscoveryFilter)
+	Close()
 }
 
 type xClient struct {
@@ -241,7 +241,14 @@ func (c *xClient) selectClient(ctx context.Context, servicePath, serviceMethod s
 
 func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 	// TODO: improve the lock
+	var client RPCClient
+	var needCallPlugin bool
 	c.mu.Lock()
+	defer func() {
+		if needCallPlugin {
+			c.Plugins.DoClientConnected((client.(*Client)).Conn)
+		}
+	}()
 	defer c.mu.Unlock()
 
 	breaker, ok := c.breakers.Load(k)
@@ -249,7 +256,7 @@ func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 		return nil, ErrBreakerOpen
 	}
 
-	client := c.cachedClient[k]
+	client = c.cachedClient[k]
 	if client != nil {
 		if !client.IsClosing() && !client.IsShutdown() {
 			return client, nil
@@ -281,7 +288,7 @@ func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 				return nil, err
 			}
 			if c.Plugins != nil {
-				c.Plugins.DoClientConnected((client.(*Client)).Conn)
+				needCallPlugin = true
 			}
 
 		}

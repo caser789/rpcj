@@ -12,9 +12,9 @@ import (
 
 	"github.com/abronan/valkeyrie"
 	"github.com/abronan/valkeyrie/store"
-	"github.com/abronan/valkeyrie/store/redis"
 	"github.com/caser789/rpcj/log"
 	metrics "github.com/rcrowley/go-metrics"
+	"github.com/smallnest/valkeyrie/store/redis"
 )
 
 func init() {

@@ -54,7 +54,7 @@ func NewEtcdV3DiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 
 	ps, err := kv.List(basePath)
 	if err != nil {
-		log.Infof("cannot get services of from registry: %v, err: %v", basePath, err)
+		log.Errorf("cannot get services of from registry: %v, err: %v", basePath, err)
 		panic(err)
 	}
 	var pairs = make([]*KVPair, 0, len(ps))
@@ -155,7 +155,7 @@ func (d *EtcdV3Discovery) watch() {
 		var tempDelay time.Duration
 
 		retry := d.RetriesAfterWatchFailed
-		for d.RetriesAfterWatchFailed == -1 || retry > 0 {
+		for d.RetriesAfterWatchFailed == -1 || retry >= 0 {
 			c, err = d.kv.WatchTree(d.basePath, nil)
 			if err != nil {
 				if d.RetriesAfterWatchFailed > 0 {

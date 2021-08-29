@@ -22,7 +22,7 @@ type ConsulDiscovery struct {
 	kv       store.Store
 	pairs    []*KVPair
 	chans    []chan []*KVPair
-	mu       sync.Locker
+	mu       sync.Mutex
 	// -1 means it always retry to watch until zookeeper is ok, 0 means no retry.
 	RetriesAfterWatchFailed int
 
@@ -143,7 +143,7 @@ func (d *ConsulDiscovery) watch() {
 		var tempDelay time.Duration
 
 		retry := d.RetriesAfterWatchFailed
-		for d.RetriesAfterWatchFailed == -1 || retry > 0 {
+		for d.RetriesAfterWatchFailed == -1 || retry >= 0 {
 			c, err = d.kv.WatchTree(d.basePath, nil)
 			if err != nil {
 				if d.RetriesAfterWatchFailed > 0 {
