@@ -58,13 +58,14 @@ var (
 
 // Server is rpcx server that use TCP or UDP.
 type Server struct {
-	ln                net.Listener
-	readTimeout       time.Duration
-	writeTimeout      time.Duration
-	gatewayHTTPServer *http.Server
-
-	serviceMapMu sync.RWMutex
-	serviceMap   map[string]*service
+	ln                 net.Listener
+	readTimeout        time.Duration
+	writeTimeout       time.Duration
+	gatewayHTTPServer  *http.Server
+	DisableHTTPGateway bool // should disable http invoke or not.
+	DisableJSONRPC     bool // should disable json rpc or not.
+	serviceMapMu       sync.RWMutex
+	serviceMap         map[string]*service
 
 	mu         sync.RWMutex
 	activeConn map[net.Conn]struct{}
@@ -421,7 +422,9 @@ func (s *Server) serveConn(conn net.Conn) {
 						res.Metadata = resMetadata
 					} else {
 						for k, v := range resMetadata {
-							meta[k] = v
+							if meta[k] == "" {
+								meta[k] = v
+							}
 						}
 					}
 				}

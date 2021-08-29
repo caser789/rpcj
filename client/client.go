@@ -352,6 +352,7 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 	if meta != nil { //copy meta in context to meta in requests
 		call.Metadata = rmeta
 	}
+	r.Metadata = rmeta
 	done := make(chan *Call, 10)
 	call.Done = done
 
