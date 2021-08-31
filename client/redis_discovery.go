@@ -98,7 +98,7 @@ func NewRedisDiscoveryTemplate(basePath string, etcdAddr []string, options *stor
 		basePath = basePath[:len(basePath)-1]
 	}
 
-	kv, err := valkeyrie.NewStore(store.ETCD, etcdAddr, options)
+	kv, err := valkeyrie.NewStore(store.REDIS, etcdAddr, options)
 	if err != nil {
 		log.Infof("cannot create store: %v", err)
 		panic(err)
