@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/caser789/rpcj/protocol"
@@ -54,6 +55,9 @@ func (s *Server) handleJSONRPCRequest(ctx context.Context, r *jsonrpcRequest, he
 	res.ID = r.ID
 
 	req := protocol.GetPooledMsg()
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]string)
+	}
 
 	if r.ID == nil {
 		req.SetOneway(true)
@@ -73,11 +77,19 @@ func (s *Server) handleJSONRPCRequest(ctx context.Context, r *jsonrpcRequest, he
 	req.ServiceMethod = pathAndMethod[1]
 	req.Payload = *r.Params
 
+	// meta
+	meta := header.Get(XMeta)
+	if meta != "" {
+		metadata, _ := url.ParseQuery(meta)
+		for k, v := range metadata {
+			if len(v) > 0 {
+				req.Metadata[k] = v[0]
+			}
+		}
+	}
+
 	auth := header.Get("Authorization")
 	if auth != "" {
-		if req.Metadata == nil {
-			req.Metadata = make(map[string]string)
-		}
 		req.Metadata[share.AuthKey] = auth
 	}
 
