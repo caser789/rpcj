@@ -71,9 +71,7 @@ func (d *MultipleServersDiscovery) Update(pairs []*KVPair) {
 		ch := ch
 		go func() {
 			defer func() {
-				if r := recover(); r != nil {
-
-				}
+				recover()
 			}()
 			select {
 			case ch <- pairs:

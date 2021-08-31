@@ -951,9 +951,7 @@ func (c *xClient) Close() error {
 
 	go func() {
 		defer func() {
-			if r := recover(); r != nil {
-
-			}
+			recover()
 		}()
 
 		c.discovery.RemoveWatcher(c.ch)

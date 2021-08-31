@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/caser789/rpcj/_testutils"
+	testutils "github.com/caser789/rpcj/_testutils"
 	"github.com/caser789/rpcj/protocol"
 	"github.com/caser789/rpcj/share"
 )
@@ -39,36 +39,23 @@ func (t *Arith) ConsumingOperation(ctx context.Context, args *testutils.ThriftAr
 	return nil
 }
 
-func TestThrift(t *testing.T) {
-	s := NewServer()
-	s.RegisterName("Arith", new(Arith), "")
-	s.Serve("tcp", ":8999")
-	s.Register(new(Arith), "")
-}
-
-func TestGo(t *testing.T) {
-	go func() {
-		ch := make(chan int, 1)
-		time.Sleep(2 * time.Second)
-		ch <- 1
-		<-ch
-		fmt.Println("go")
-	}()
-
-	ch2 := make(chan struct{}, 1)
-	<-ch2
-	fmt.Println("over")
-}
-
 func TestShutdownHook(t *testing.T) {
 	s := NewServer()
+	var cancel1 context.CancelFunc
 	s.RegisterOnShutdown(func(s *Server) {
-		ctx, _ := context.WithTimeout(context.Background(), 155*time.Second)
+		var ctx context.Context
+		ctx, cancel1 = context.WithTimeout(context.Background(), 155*time.Second)
 		s.Shutdown(ctx)
 	})
-	s.RegisterName("Arith", new(Arith), "")
-	s.Serve("tcp", ":8995")
+	s.RegisterName("Arith2", new(Arith), "")
 	s.Register(new(Arith), "")
+	go s.Serve("tcp", ":0")
+
+	time.Sleep(time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	s.Shutdown(ctx)
+	cancel()
+	cancel1()
 }
 
 func TestHandleRequest(t *testing.T) {
