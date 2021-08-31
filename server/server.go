@@ -64,8 +64,9 @@ type Server struct {
 	gatewayHTTPServer  *http.Server
 	DisableHTTPGateway bool // should disable http invoke or not.
 	DisableJSONRPC     bool // should disable json rpc or not.
-	serviceMapMu       sync.RWMutex
-	serviceMap         map[string]*service
+
+	serviceMapMu sync.RWMutex
+	serviceMap   map[string]*service
 
 	mu         sync.RWMutex
 	activeConn map[net.Conn]struct{}
@@ -94,8 +95,11 @@ type Server struct {
 // NewServer returns a server.
 func NewServer(options ...OptionFn) *Server {
 	s := &Server{
-		Plugins: &pluginContainer{},
-		options: make(map[string]interface{}),
+		Plugins:    &pluginContainer{},
+		options:    make(map[string]interface{}),
+		activeConn: make(map[net.Conn]struct{}),
+		doneChan:   make(chan struct{}),
+		serviceMap: make(map[string]*service),
 	}
 
 	for _, op := range options {
@@ -117,8 +121,7 @@ func (s *Server) Address() net.Addr {
 
 // ActiveClientConn returns active connections.
 func (s *Server) ActiveClientConn() []net.Conn {
-	var result []net.Conn
-
+	result := make([]net.Conn, 0, len(s.activeConn))
 	s.mu.RLock()
 	for clientConn := range s.activeConn {
 		result = append(result, clientConn)
@@ -158,12 +161,6 @@ func (s *Server) SendMessage(conn net.Conn, servicePath, serviceMethod string, m
 }
 
 func (s *Server) getDoneChan() <-chan struct{} {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.doneChan == nil {
-		s.doneChan = make(chan struct{})
-	}
 	return s.doneChan
 }
 
@@ -208,17 +205,11 @@ func (s *Server) Serve(network, address string) (err error) {
 // creating a new service goroutine for each.
 // The service goroutines read requests and then call services to reply to them.
 func (s *Server) serveListener(ln net.Listener) error {
-	if s.Plugins == nil {
-		s.Plugins = &pluginContainer{}
-	}
 
 	var tempDelay time.Duration
 
 	s.mu.Lock()
 	s.ln = ln
-	if s.activeConn == nil {
-		s.activeConn = make(map[net.Conn]struct{})
-	}
 	s.mu.Unlock()
 
 	for {
@@ -274,21 +265,11 @@ func (s *Server) serveListener(ln net.Listener) error {
 func (s *Server) serveByHTTP(ln net.Listener, rpcPath string) {
 	s.ln = ln
 
-	if s.Plugins == nil {
-		s.Plugins = &pluginContainer{}
-	}
-
 	if rpcPath == "" {
 		rpcPath = share.DefaultRPCPath
 	}
 	http.Handle(rpcPath, s)
 	srv := &http.Server{Handler: nil}
-
-	s.mu.Lock()
-	if s.activeConn == nil {
-		s.activeConn = make(map[net.Conn]struct{})
-	}
-	s.mu.Unlock()
 
 	srv.Serve(ln)
 }
@@ -309,10 +290,6 @@ func (s *Server) serveConn(conn net.Conn) {
 		delete(s.activeConn, conn)
 		s.mu.Unlock()
 		conn.Close()
-
-		if s.Plugins == nil {
-			s.Plugins = &pluginContainer{}
-		}
 
 		s.Plugins.DoPostConnClose(conn)
 	}()
@@ -628,7 +605,7 @@ var connected = "200 Connected to rpcx"
 
 // ServeHTTP implements an http.Handler that answers RPC requests.
 func (s *Server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	if req.Method != "CONNECT" {
+	if req.Method != http.MethodConnect {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		io.WriteString(w, "405 must CONNECT\n")
@@ -722,21 +699,14 @@ func (s *Server) checkProcessMsg() bool {
 }
 
 func (s *Server) closeDoneChanLocked() {
-	ch := s.getDoneChanLocked()
 	select {
-	case <-ch:
+	case <-s.doneChan:
 		// Already closed. Don't close again.
 	default:
 		// Safe to close here. We're the only closer, guarded
-		// by s.mu.
-		close(ch)
+		// by s.mu.RegisterName
+		close(s.doneChan)
 	}
-}
-func (s *Server) getDoneChanLocked() chan struct{} {
-	if s.doneChan == nil {
-		s.doneChan = make(chan struct{})
-	}
-	return s.doneChan
 }
 
 var ip4Reg = regexp.MustCompile(`^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$`)
