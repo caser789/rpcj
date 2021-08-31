@@ -33,8 +33,9 @@ func (s *Server) jsonrpcHandler(w http.ResponseWriter, r *http.Request) {
 		writeResponse(w, res)
 		return
 	}
+	conn := r.Context().Value(HttpConnContextKey).(net.Conn)
 
-	ctx := context.WithValue(r.Context(), RemoteConnContextKey, r.RemoteAddr)
+	ctx := context.WithValue(r.Context(), RemoteConnContextKey, conn)
 
 	if req.ID != nil {
 		res := s.handleJSONRPCRequest(ctx, req, r.Header)
@@ -205,13 +206,20 @@ func (s *Server) startJSONRPC2(ln net.Listener) {
 	newServer := http.NewServeMux()
 	newServer.HandleFunc("/", s.jsonrpcHandler)
 
+	srv := http.Server{ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+		return context.WithValue(ctx, HttpConnContextKey, c)
+	}}
+
 	if s.corsOptions != nil {
 		opt := cors.Options(*s.corsOptions)
 		c := cors.New(opt)
 		mux := c.Handler(newServer)
-		go http.Serve(ln, mux)
+		srv.Handler = mux
+
+		go srv.Serve(ln)
 	} else {
-		go http.Serve(ln, newServer)
+		srv.Handler = newServer
+		go srv.Serve(ln)
 	}
 
 }
