@@ -290,7 +290,6 @@ func (c *xClient) getCachedClient(k string) (RPCClient, error) {
 			if c.Plugins != nil {
 				needCallPlugin = true
 			}
-
 		}
 
 		client.RegisterServerMessageChan(c.serverMessageChan)
@@ -412,7 +411,7 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 	switch c.failMode {
 	case Failtry:
 		retries := c.option.Retries
-		for retries > 0 {
+		for retries >= 0 {
 			retries--
 
 			if client != nil {
@@ -436,7 +435,7 @@ func (c *xClient) Call(ctx context.Context, serviceMethod string, args interface
 		return err
 	case Failover:
 		retries := c.option.Retries
-		for retries > 0 {
+		for retries >= 0 {
 			retries--
 
 			if client != nil {
@@ -573,7 +572,7 @@ func (c *xClient) SendRaw(ctx context.Context, r *protocol.Message) (map[string]
 	switch c.failMode {
 	case Failtry:
 		retries := c.option.Retries
-		for retries > 0 {
+		for retries >= 0 {
 			retries--
 			if client != nil {
 				m, payload, err := client.SendRaw(ctx, r)
@@ -597,7 +596,7 @@ func (c *xClient) SendRaw(ctx context.Context, r *protocol.Message) (map[string]
 		return nil, nil, err
 	case Failover:
 		retries := c.option.Retries
-		for retries > 0 {
+		for retries >= 0 {
 			retries--
 			if client != nil {
 				m, payload, err := client.SendRaw(ctx, r)

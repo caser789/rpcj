@@ -246,15 +246,15 @@ func (s *Server) serveListener(ln net.Listener) error {
 			tc.SetLinger(10)
 		}
 
-		s.mu.Lock()
-		s.activeConn[conn] = struct{}{}
-		s.mu.Unlock()
-
 		conn, ok := s.Plugins.DoPostConnAccept(conn)
 		if !ok {
 			closeChannel(s, conn)
 			continue
 		}
+
+		s.mu.Lock()
+		s.activeConn[conn] = struct{}{}
+		s.mu.Unlock()
 
 		go s.serveConn(conn)
 	}
@@ -370,7 +370,7 @@ func (s *Server) serveConn(conn net.Conn) {
 			protocol.FreeMsg(req)
 			// auth failed, closed the connection
 			if closeConn {
-				log.Info("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
+				log.Infof("auth failed for conn %s: %v", conn.RemoteAddr().String(), err)
 				return
 			}
 			continue
