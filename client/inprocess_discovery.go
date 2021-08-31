@@ -11,24 +11,24 @@ func NewInprocessDiscovery() ServiceDiscovery {
 }
 
 // Clone clones this ServiceDiscovery with new servicePath.
-func (d InprocessDiscovery) Clone(servicePath string) ServiceDiscovery {
+func (d *InprocessDiscovery) Clone(servicePath string) ServiceDiscovery {
 	return &d
 }
 
 // SetFilter sets the filer.
-func (d InprocessDiscovery) SetFilter(filter ServiceDiscoveryFilter) {
+func (d *InprocessDiscovery) SetFilter(filter ServiceDiscoveryFilter) {
 }
 
 // GetServices returns the static server
-func (d InprocessDiscovery) GetServices() []*KVPair {
+func (d *InprocessDiscovery) GetServices() []*KVPair {
 	return []*KVPair{&KVPair{Key: "inprocess@127.0.0.1:0", Value: ""}}
 }
 
 // WatchService returns a nil chan.
-func (d InprocessDiscovery) WatchService() chan []*KVPair {
+func (d *InprocessDiscovery) WatchService() chan []*KVPair {
 	return nil
 }
 
-func (d InprocessDiscovery) RemoveWatcher(ch chan []*KVPair) {}
+func (d *InprocessDiscovery) RemoveWatcher(ch chan []*KVPair) {}
 
 func (d *InprocessDiscovery) Close() {}
