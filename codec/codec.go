@@ -51,7 +51,9 @@ func (c JSONCodec) Encode(i interface{}) ([]byte, error) {
 
 // Decode decodes an object from slice of bytes.
 func (c JSONCodec) Decode(data []byte, i interface{}) error {
-	return json.Unmarshal(data, i)
+	d := json.NewDecoder(bytes.NewBuffer(data))
+	d.UseNumber()
+	return d.Decode(i)
 }
 
 // PBCodec uses protobuf marshaler and unmarshaler.
