@@ -6,13 +6,14 @@ import (
 	"io"
 	"sync"
 
-	"github.com/caser789/rpcj/serverplugin"
+	"github.com/caser789/rpcj/share"
 
 	"github.com/caser789/rpcj/protocol"
 	multierror "github.com/hashicorp/go-multierror"
 )
 
 // OneClient wraps servicesPath and XClients.
+// Users can use a shared oneclient to access multiple services.
 type OneClient struct {
 	xclients map[string]XClient
 	mu       sync.RWMutex
@@ -264,16 +265,16 @@ func (c *OneClient) Fork(ctx context.Context, servicePath string, serviceMethod 
 
 func (c *OneClient) SendFile(ctx context.Context, fileName string, rateInBytesPerSecond int64) error {
 	c.mu.RLock()
-	xclient := c.xclients[serverplugin.SendFileServiceName]
+	xclient := c.xclients[share.SendFileServiceName]
 	c.mu.RUnlock()
 
 	if xclient == nil {
 		var err error
 		c.mu.Lock()
-		xclient = c.xclients[serverplugin.SendFileServiceName]
+		xclient = c.xclients[share.SendFileServiceName]
 		if xclient == nil {
-			xclient, err = c.newXClient(serverplugin.SendFileServiceName)
-			c.xclients[serverplugin.SendFileServiceName] = xclient
+			xclient, err = c.newXClient(share.SendFileServiceName)
+			c.xclients[share.SendFileServiceName] = xclient
 		}
 		c.mu.Unlock()
 		if err != nil {
@@ -286,16 +287,16 @@ func (c *OneClient) SendFile(ctx context.Context, fileName string, rateInBytesPe
 
 func (c *OneClient) DownloadFile(ctx context.Context, requestFileName string, saveTo io.Writer) error {
 	c.mu.RLock()
-	xclient := c.xclients[serverplugin.SendFileServiceName]
+	xclient := c.xclients[share.SendFileServiceName]
 	c.mu.RUnlock()
 
 	if xclient == nil {
 		var err error
 		c.mu.Lock()
-		xclient = c.xclients[serverplugin.SendFileServiceName]
+		xclient = c.xclients[share.SendFileServiceName]
 		if xclient == nil {
-			xclient, err = c.newXClient(serverplugin.SendFileServiceName)
-			c.xclients[serverplugin.SendFileServiceName] = xclient
+			xclient, err = c.newXClient(share.SendFileServiceName)
+			c.xclients[share.SendFileServiceName] = xclient
 		}
 		c.mu.Unlock()
 		if err != nil {
