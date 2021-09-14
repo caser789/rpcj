@@ -56,12 +56,12 @@ func NewConsulDiscoveryStore(basePath string, kv store.Store) ServiceDiscovery {
 	d.stopCh = make(chan struct{})
 
 	ps, err := kv.List(basePath)
-	if err != nil {
+	if err != nil && err.Error() != store.ErrKeyNotFound.Error() {
 		log.Infof("cannot get services of from registry: %v, err: %v", basePath, err)
 		panic(err)
 	}
 
-	var pairs = make([]*KVPair, 0, len(ps))
+	pairs := make([]*KVPair, 0, len(ps))
 	prefix := d.basePath + "/"
 	for _, p := range ps {
 		k := strings.TrimPrefix(p.Key, prefix)
@@ -137,6 +137,10 @@ func (d *ConsulDiscovery) RemoveWatcher(ch chan []*KVPair) {
 	d.chans = chans
 }
 func (d *ConsulDiscovery) watch() {
+	defer func() {
+		d.kv.Close()
+	}()
+
 	for {
 		var err error
 		var c <-chan []*store.KVPair

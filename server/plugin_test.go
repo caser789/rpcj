@@ -2,12 +2,13 @@ package server
 
 import (
 	"context"
-	"github.com/caser789/rpcj/client"
-	"github.com/caser789/rpcj/protocol"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/caser789/rpcj/client"
+	"github.com/caser789/rpcj/protocol"
 )
 
 type HeartbeatHandler struct{}
@@ -28,7 +29,7 @@ func TestPluginHeartbeat(t *testing.T) {
 	s.Plugins.Add(h)
 	s.RegisterName("Arith", new(Arith), "")
 	wg := sync.WaitGroup{}
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		// server
 		defer wg.Done()
@@ -45,8 +46,7 @@ func TestPluginHeartbeat(t *testing.T) {
 		opts := client.DefaultOption
 		opts.Heartbeat = true
 		opts.HeartbeatInterval = time.Second
-		opts.ReadTimeout = time.Duration(5) * time.Second
-		opts.WriteTimeout = time.Duration(5) * time.Second
+		opts.IdleTimeout = time.Duration(5) * time.Second
 		opts.ConnectTimeout = time.Duration(5) * time.Second
 		// PeerDiscovery
 		d := client.NewPeer2PeerDiscovery("tcp@127.0.0.1:9001", "")
