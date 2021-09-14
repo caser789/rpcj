@@ -81,15 +81,8 @@ func HTTPRequest2RpcxRequest(r *http.Request) (*protocol.Message, error) {
 		req.Metadata[share.AuthKey] = auth
 	}
 
-	sp := h.Get(XServicePath)
-	if sp != "" {
-		req.ServicePath = sp
-	}
-
-	sm := h.Get(XServiceMethod)
-	if sm != "" {
-		req.ServiceMethod = sm
-	}
+	req.ServicePath = h.Get(XServicePath)
+	req.ServiceMethod = h.Get(XServiceMethod)
 
 	payload, err := ioutil.ReadAll(r.Body)
 	if err != nil {
