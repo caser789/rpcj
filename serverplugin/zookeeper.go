@@ -1,11 +1,11 @@
 package serverplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -84,10 +84,10 @@ func (p *ZooKeeperRegisterPlugin) Start() error {
 					close(p.done)
 					return
 				case <-ticker.C:
-					var data []byte
+					extra := make(map[string]string)
 					if p.Metrics != nil {
-						clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-						data = []byte(strconv.FormatInt(clientMeter.Count()/60, 10))
+						extra["calls"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("calls", p.Metrics).RateMean())
+						extra["connections"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("connections", p.Metrics).RateMean())
 					}
 					//set this same metrics for all services at this server
 					for _, name := range p.Services {
@@ -106,7 +106,9 @@ func (p *ZooKeeperRegisterPlugin) Start() error {
 							}
 						} else {
 							v, _ := url.ParseQuery(string(kvPaire.Value))
-							v.Set("tps", string(data))
+							for key, value := range extra {
+								v.Set(key, value)
+							}
 							p.kv.Put(nodePath, []byte(v.Encode()), &store.WriteOptions{TTL: p.UpdateInterval * 2})
 						}
 					}
@@ -145,18 +147,27 @@ func (p *ZooKeeperRegisterPlugin) Stop() error {
 			log.Infof("delete zk path %s", nodePath, err)
 		}
 	}
+
 	close(p.dying)
 	<-p.done
+
 	return nil
 }
 
 // HandleConnAccept handles connections from clients
 func (p *ZooKeeperRegisterPlugin) HandleConnAccept(conn net.Conn) (net.Conn, bool) {
 	if p.Metrics != nil {
-		clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-		clientMeter.Mark(1)
+		metrics.GetOrRegisterMeter("connections", p.Metrics).Mark(1)
 	}
 	return conn, true
+}
+
+// PreCall handles rpc call from clients
+func (p *ZooKeeperRegisterPlugin) PreCall(_ context.Context, _, _ string, args interface{}) (interface{}, error) {
+	if p.Metrics != nil {
+		metrics.GetOrRegisterMeter("calls", p.Metrics).Mark(1)
+	}
+	return args, nil
 }
 
 // Register handles registering event.

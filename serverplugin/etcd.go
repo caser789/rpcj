@@ -1,11 +1,11 @@
 package serverplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -79,10 +79,10 @@ func (p *EtcdRegisterPlugin) Start() error {
 					close(p.done)
 					return
 				case <-ticker.C:
-					var data []byte
+					extra := make(map[string]string)
 					if p.Metrics != nil {
-						clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-						data = []byte(strconv.FormatInt(clientMeter.Count()/60, 10))
+						extra["calls"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("calls", p.Metrics).RateMean())
+						extra["connections"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("connections", p.Metrics).RateMean())
 					}
 					//set this same metrics for all services at this server
 					for _, name := range p.Services {
@@ -102,7 +102,9 @@ func (p *EtcdRegisterPlugin) Start() error {
 
 						} else {
 							v, _ := url.ParseQuery(string(kvPair.Value))
-							v.Set("tps", string(data))
+							for key, value := range extra {
+								v.Set(key, value)
+							}
 							p.kv.Put(nodePath, []byte(v.Encode()), &store.WriteOptions{TTL: p.UpdateInterval * 3})
 						}
 					}
@@ -140,17 +142,23 @@ func (p *EtcdRegisterPlugin) Stop() error {
 
 	close(p.dying)
 	<-p.done
-
 	return nil
 }
 
 // HandleConnAccept handles connections from clients
 func (p *EtcdRegisterPlugin) HandleConnAccept(conn net.Conn) (net.Conn, bool) {
 	if p.Metrics != nil {
-		clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-		clientMeter.Mark(1)
+		metrics.GetOrRegisterMeter("connections", p.Metrics).Mark(1)
 	}
 	return conn, true
+}
+
+// PreCall handles rpc call from clients
+func (p *EtcdRegisterPlugin) PreCall(_ context.Context, _, _ string, args interface{}) (interface{}, error) {
+	if p.Metrics != nil {
+		metrics.GetOrRegisterMeter("calls", p.Metrics).Mark(1)
+	}
+	return args, nil
 }
 
 // Register handles registering event.
@@ -190,7 +198,6 @@ func (p *EtcdRegisterPlugin) Register(name string, rcvr interface{}, metadata st
 		log.Errorf("cannot create etcd path %s: %v", nodePath, err)
 		return err
 	}
-
 	p.Services = append(p.Services, name)
 
 	p.metasLock.Lock()

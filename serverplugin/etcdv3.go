@@ -1,11 +1,11 @@
 package serverplugin
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -71,7 +71,6 @@ func (p *EtcdV3RegisterPlugin) Start() error {
 		ticker := time.NewTicker(p.UpdateInterval)
 		go func() {
 			defer p.kv.Close()
-
 			// refresh service TTL
 			for {
 				select {
@@ -79,10 +78,10 @@ func (p *EtcdV3RegisterPlugin) Start() error {
 					close(p.done)
 					return
 				case <-ticker.C:
-					var data []byte
+					extra := make(map[string]string)
 					if p.Metrics != nil {
-						clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-						data = []byte(strconv.FormatInt(clientMeter.Count()/60, 10))
+						extra["calls"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("calls", p.Metrics).RateMean())
+						extra["connections"] = fmt.Sprintf("%.2f", metrics.GetOrRegisterMeter("connections", p.Metrics).RateMean())
 					}
 					//set this same metrics for all services at this server
 					for _, name := range p.Services {
@@ -95,15 +94,17 @@ func (p *EtcdV3RegisterPlugin) Start() error {
 							meta := p.metas[name]
 							p.metasLock.RUnlock()
 
-							err = p.kv.Put(nodePath, []byte(meta), &store.WriteOptions{TTL: p.UpdateInterval * time.Second})
+							err = p.kv.Put(nodePath, []byte(meta), &store.WriteOptions{TTL: p.UpdateInterval + time.Second})
 							if err != nil {
 								log.Errorf("cannot re-create etcd path %s: %v", nodePath, err)
 							}
 
 						} else {
 							v, _ := url.ParseQuery(string(kvPair.Value))
-							v.Set("tps", string(data))
-							p.kv.Put(nodePath, []byte(v.Encode()), &store.WriteOptions{TTL: p.UpdateInterval * time.Second})
+							for key, value := range extra {
+								v.Set(key, value)
+							}
+							p.kv.Put(nodePath, []byte(v.Encode()), &store.WriteOptions{TTL: p.UpdateInterval + time.Second})
 						}
 					}
 				}
@@ -117,7 +118,7 @@ func (p *EtcdV3RegisterPlugin) Start() error {
 // Stop unregister all services.
 func (p *EtcdV3RegisterPlugin) Stop() error {
 	if p.kv == nil {
-		kv, err := libkv.NewStore(store.ETCDV3, p.EtcdServers, p.Options)
+		kv, err := libkv.NewStore(etcd.ETCDV3, p.EtcdServers, p.Options)
 		if err != nil {
 			log.Errorf("cannot create etcd registry: %v", err)
 			return err
@@ -140,17 +141,23 @@ func (p *EtcdV3RegisterPlugin) Stop() error {
 
 	close(p.dying)
 	<-p.done
-
 	return nil
 }
 
 // HandleConnAccept handles connections from clients
 func (p *EtcdV3RegisterPlugin) HandleConnAccept(conn net.Conn) (net.Conn, bool) {
 	if p.Metrics != nil {
-		clientMeter := metrics.GetOrRegisterMeter("clientMeter", p.Metrics)
-		clientMeter.Mark(1)
+		metrics.GetOrRegisterMeter("connections", p.Metrics).Mark(1)
 	}
 	return conn, true
+}
+
+// PreCall handles rpc call from clients
+func (p *EtcdV3RegisterPlugin) PreCall(_ context.Context, _, _ string, args interface{}) (interface{}, error) {
+	if p.Metrics != nil {
+		metrics.GetOrRegisterMeter("calls", p.Metrics).Mark(1)
+	}
+	return args, nil
 }
 
 // Register handles registering event.
@@ -163,7 +170,7 @@ func (p *EtcdV3RegisterPlugin) Register(name string, rcvr interface{}, metadata 
 
 	if p.kv == nil {
 		etcd.Register()
-		kv, err := libkv.NewStore(store.ETCDV3, p.EtcdServers, nil)
+		kv, err := libkv.NewStore(etcd.ETCDV3, p.EtcdServers, nil)
 		if err != nil {
 			log.Errorf("cannot create etcd registry: %v", err)
 			return err
@@ -214,7 +221,7 @@ func (p *EtcdV3RegisterPlugin) Unregister(name string) (err error) {
 
 	if p.kv == nil {
 		etcd.Register()
-		kv, err := libkv.NewStore(store.ETCDV3, p.EtcdServers, nil)
+		kv, err := libkv.NewStore(etcd.ETCDV3, p.EtcdServers, nil)
 		if err != nil {
 			log.Errorf("cannot create etcd registry: %v", err)
 			return err
