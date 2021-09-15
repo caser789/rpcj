@@ -124,7 +124,7 @@ func (d *RedisDiscovery) GetServices() []*KVPair {
 
 // WatchService returns a nil chan.
 func (d *RedisDiscovery) WatchService() chan []*KVPair {
-	d.mu.Lock()
+	d.mu.RLock()
 	defer d.mu.Unlock()
 
 	ch := make(chan []*KVPair, 10)

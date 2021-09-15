@@ -44,12 +44,13 @@ func (e ServiceError) Error() string {
 
 // DefaultOption is a common option configuration for client.
 var DefaultOption = Option{
-	Retries:        3,
-	RPCPath:        share.DefaultRPCPath,
-	ConnectTimeout: 10 * time.Second,
-	SerializeType:  protocol.MsgPack,
-	CompressType:   protocol.None,
-	BackupLatency:  10 * time.Millisecond,
+	Retries:            3,
+	RPCPath:            share.DefaultRPCPath,
+	ConnectTimeout:     10 * time.Second,
+	SerializeType:      protocol.MsgPack,
+	CompressType:       protocol.None,
+	BackupLatency:      10 * time.Millisecond,
+	TCPKeepAlivePeriod: time.Minute,
 }
 
 // Breaker is a CircuitBreaker interface.
@@ -151,6 +152,9 @@ type Option struct {
 
 	Heartbeat         bool
 	HeartbeatInterval time.Duration
+
+	// TCPKeepAlive, if it is zero we don't set keepalive
+	TCPKeepAlivePeriod time.Duration
 }
 
 // Call represents an active RPC.
