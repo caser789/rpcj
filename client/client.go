@@ -517,40 +517,41 @@ func (client *Client) send(ctx context.Context, call *Call) {
 		req.SetOneway(true)
 	}
 
-	// heartbeat
+	// heartbeat, and use default SerializeType (msgpack)
 	if call.ServicePath == "" && call.ServiceMethod == "" {
 		req.SetHeartbeat(true)
-	}
-	{
+		req.SetSerializeType(protocol.MsgPack)
+	} else {
 		req.SetSerializeType(client.option.SerializeType)
-		if call.Metadata != nil {
-			req.Metadata = call.Metadata
-		}
-
-		req.ServicePath = call.ServicePath
-		req.ServiceMethod = call.ServiceMethod
-
-		data, err := codec.Encode(call.Args)
-		if err != nil {
-			delete(client.pending, seq)
-			call.Error = err
-			call.done()
-			return
-		}
-		if len(data) > 1024 && client.option.CompressType != protocol.None {
-			req.SetCompressType(client.option.CompressType)
-		}
-
-		req.Payload = data
 	}
+
+	if call.Metadata != nil {
+		req.Metadata = call.Metadata
+	}
+
+	req.ServicePath = call.ServicePath
+	req.ServiceMethod = call.ServiceMethod
+
+	data, err := codec.Encode(call.Args)
+	if err != nil {
+		delete(client.pending, seq)
+		call.Error = err
+		call.done()
+		return
+	}
+	if len(data) > 1024 && client.option.CompressType != protocol.None {
+		req.SetCompressType(client.option.CompressType)
+	}
+
+	req.Payload = data
 
 	if client.Plugins != nil {
 		_ = client.Plugins.DoClientBeforeEncode(req)
 	}
 
-	data := req.EncodeSlicePointer()
-	_, err := client.Conn.Write(*data)
-	protocol.PutData(data)
+	allData := req.EncodeSlicePointer()
+	_, err = client.Conn.Write(*allData)
+	protocol.PutData(allData)
 
 	if err != nil {
 		client.mutex.Lock()
@@ -742,6 +743,7 @@ func (client *Client) heartbeat() {
 	if client.option.MaxWaitForHeartbeat == 0 {
 		client.option.MaxWaitForHeartbeat = 30 * time.Second
 	}
+
 	for range t.C {
 		if client.IsShutdown() || client.IsClosing() {
 			t.Stop()
@@ -762,7 +764,7 @@ func (client *Client) heartbeat() {
 			log.Warnf("failed to heartbeat to %s: %v", client.Conn.RemoteAddr().String(), err)
 			abnormal = true
 		}
-		// check request == reply
+
 		if reply != request {
 			log.Warnf("reply %d in heartbeat to %s is different from request %d: %v", reply, client.Conn.RemoteAddr().String(), request)
 		}
