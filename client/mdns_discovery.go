@@ -24,6 +24,7 @@ type MDNSDiscovery struct {
 	WatchInterval time.Duration
 	domain        string
 	service       string
+	pairsMu       sync.RWMutex
 	pairs         []*KVPair
 	chans         []chan []*KVPair
 
@@ -36,7 +37,7 @@ type MDNSDiscovery struct {
 
 // NewMDNSDiscovery returns a new MDNSDiscovery.
 // If domain is empty, use "local." in default.
-func NewMDNSDiscovery(service string, timeout time.Duration, watchInterval time.Duration, domain string) ServiceDiscovery {
+func NewMDNSDiscovery(service string, timeout time.Duration, watchInterval time.Duration, domain string) (ServiceDiscovery, error) {
 	if domain == "" {
 		domain = "local."
 	}
@@ -44,24 +45,26 @@ func NewMDNSDiscovery(service string, timeout time.Duration, watchInterval time.
 	d.stopCh = make(chan struct{})
 
 	var err error
+	d.pairsMu.Lock()
 	d.pairs, err = d.browse()
+	d.pairsMu.Unlock()
 	if err != nil {
 		log.Warnf("failed to browse services: %v", err)
 	}
 	go d.watch()
-	return d
+	return d, nil
 }
 
 // NewMDNSDiscoveryTemplate returns a new MDNSDiscovery template.
-func NewMDNSDiscoveryTemplate(timeout time.Duration, watchInterval time.Duration, domain string) ServiceDiscovery {
+func NewMDNSDiscoveryTemplate(timeout time.Duration, watchInterval time.Duration, domain string) (ServiceDiscovery, error) {
 	if domain == "" {
 		domain = "local."
 	}
-	return &MDNSDiscovery{Timeout: timeout, WatchInterval: watchInterval, domain: domain}
+	return &MDNSDiscovery{Timeout: timeout, WatchInterval: watchInterval, domain: domain}, nil
 }
 
 // Clone clones this ServiceDiscovery with new servicePath.
-func (d *MDNSDiscovery) Clone(servicePath string) ServiceDiscovery {
+func (d *MDNSDiscovery) Clone(servicePath string) (ServiceDiscovery, error) {
 	return NewMDNSDiscovery(servicePath, d.Timeout, d.WatchInterval, d.domain)
 }
 
@@ -72,6 +75,9 @@ func (d *MDNSDiscovery) SetFilter(filter ServiceDiscoveryFilter) {
 
 // GetServices returns the servers
 func (d *MDNSDiscovery) GetServices() []*KVPair {
+	d.pairsMu.RLock()
+	defer d.pairsMu.RUnlock()
+
 	return d.pairs
 }
 
@@ -113,7 +119,10 @@ func (d *MDNSDiscovery) watch() {
 		case <-t.C:
 			pairs, err := d.browse()
 			if err == nil {
+				d.pairsMu.Lock()
 				d.pairs = pairs
+				d.pairsMu.Unlock()
+
 				d.mu.Lock()
 				for _, ch := range d.chans {
 					ch := ch
@@ -124,7 +133,7 @@ func (d *MDNSDiscovery) watch() {
 						select {
 						case ch <- pairs:
 						case <-time.After(time.Minute):
-							log.Warn("chan is full and new change has been dropped")
+							log.Warn("chan is full and new change has ben dropped")
 						}
 					}()
 				}
@@ -156,6 +165,7 @@ func (d *MDNSDiscovery) browse() ([]*KVPair, error) {
 			}
 
 			for _, sm := range services {
+
 				pair := &KVPair{
 					Key:   sm.ServiceAddress,
 					Value: sm.Meta,

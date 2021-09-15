@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/url"
@@ -604,7 +603,7 @@ func (client *Client) input() {
 
 		seq := res.Seq()
 		var call *Call
-		isServerMessage := (res.MessageType() == protocol.Request && res.IsHeartbeat() && res.IsOneway())
+		isServerMessage := (res.MessageType() == protocol.Request && !res.IsHeartbeat() && res.IsOneway())
 		if !isServerMessage {
 			client.mutex.Lock()
 			call = client.pending[seq]
@@ -749,8 +748,8 @@ func (client *Client) heartbeat() {
 			return
 		}
 
-		request := fmt.Sprintf("%d", time.Now().UnixNano())
-		reply := ""
+		request := time.Now().UnixNano()
+		reply := int64(0)
 		ctx, cancel := context.WithTimeout(context.Background(), client.option.MaxWaitForHeartbeat)
 		err := client.Call(ctx, "", "", &request, &reply)
 		abnormal := false
@@ -764,6 +763,10 @@ func (client *Client) heartbeat() {
 			abnormal = true
 		}
 		// check request == reply
+		if reply != request {
+			log.Warnf("reply %d in heartbeat to %s is different from request %d: %v", reply, client.Conn.RemoteAddr().String(), request)
+		}
+
 		if abnormal {
 			client.Close()
 		}
