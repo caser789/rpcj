@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/caser789/rpcj/log"
-	"github.com/docker/libkv"
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/etcd"
 	metrics "github.com/rcrowley/go-metrics"
+	"github.com/rpcxio/libkv"
+	"github.com/rpcxio/libkv/store"
+	"github.com/rpcxio/libkv/store/etcd"
 )
 
 func init() {

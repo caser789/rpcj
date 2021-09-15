@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/caser789/rpcj/log"
-	"github.com/docker/libkv"
-	"github.com/docker/libkv/store"
-	"github.com/docker/libkv/store/consul"
+	"github.com/rpcxio/libkv"
+	"github.com/rpcxio/libkv/store"
+	"github.com/rpcxio/libkv/store/consul"
 )
 
 func init() {
