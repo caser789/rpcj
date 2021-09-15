@@ -424,8 +424,8 @@ func (s *Server) serveConn(conn net.Conn) {
 				s.Plugins.DoHeartbeatRequest(ctx, req)
 				req.SetMessageType(protocol.Response)
 				data := req.EncodeSlicePointer()
-				conn.Write(*data)
 				protocol.PutData(data)
+				conn.Write([]byte("pong"))
 				return
 			}
 
