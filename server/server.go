@@ -110,10 +110,10 @@ func NewServer(options ...OptionFn) *Server {
 	for _, op := range options {
 		op(s)
 	}
+
 	if s.options["TCPKeepAlivePeriod"] == nil {
 		s.options["TCPKeepAlivePeriod"] = 3 * time.Minute
 	}
-
 	return s
 }
 
@@ -174,14 +174,20 @@ func (s *Server) getDoneChan() <-chan struct{} {
 	return s.doneChan
 }
 
+// startShutdownListener start a new goroutine to notify SIGTERM
+// and SIGHUP signals and handle them gracefully
 func (s *Server) startShutdownListener() {
 	go func(s *Server) {
 		log.Info("server pid:", os.Getpid())
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGTERM, syscall.SIGHUP)
-		si := <-c
+
+		// channel to receive notifications of SIGTERM and SIGHUP
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM, syscall.SIGHUP)
+
+		// custom functions to handle signal SIGTERM and SIGHUP
 		var customFuncs []func(s *Server)
-		switch si {
+
+		switch <-ch {
 		case syscall.SIGTERM:
 			customFuncs = append(s.onShutdown, func(s *Server) {
 				s.Shutdown(context.Background())
@@ -191,16 +197,15 @@ func (s *Server) startShutdownListener() {
 				s.Restart(context.Background())
 			})
 		}
-		if len(customFuncs) > 0 {
-			for _, fn := range customFuncs {
-				fn(s)
-			}
+
+		for _, fn := range customFuncs {
+			fn(s)
 		}
 	}(s)
 }
 
 // Serve starts and listens RPC requests.
-// It is blocked until receiving connectings from clients.
+// It is blocked until receiving connections from clients.
 func (s *Server) Serve(network, address string) (err error) {
 	s.startShutdownListener()
 	var ln net.Listener
@@ -221,7 +226,7 @@ func (s *Server) Serve(network, address string) (err error) {
 }
 
 // ServeListener listens RPC requests.
-// It is blocked until receiving connectings from clients.
+// It is blocked until receiving connections from clients.
 func (s *Server) ServeListener(network string, ln net.Listener) (err error) {
 	s.startShutdownListener()
 	if network == "http" {
@@ -430,23 +435,23 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 
 			resMetadata := make(map[string]string)
-			var newCtx context.Context = share.WithLocalValue(share.WithLocalValue(ctx, share.ReqMetaDataKey, req.Metadata),
+			ctx = share.WithLocalValue(share.WithLocalValue(ctx, share.ReqMetaDataKey, req.Metadata),
 				share.ResMetaDataKey, resMetadata)
 
-			newCtx, cancelFunc := parseServerTimeout(newCtx, req)
+			cancelFunc := parseServerTimeout(ctx, req)
 			if cancelFunc != nil {
 				defer cancelFunc()
 			}
 
-			s.Plugins.DoPreHandleRequest(newCtx, req)
+			s.Plugins.DoPreHandleRequest(ctx, req)
 
-			res, err := s.handleRequest(newCtx, req)
+			res, err := s.handleRequest(ctx, req)
 
 			if err != nil {
 				log.Warnf("rpcx: failed to handle request: %v", err)
 			}
 
-			s.Plugins.DoPreWriteResponse(newCtx, req, res, err)
+			s.Plugins.DoPreWriteResponse(ctx, req, res, err)
 			if !req.IsOneway() {
 				if len(resMetadata) > 0 { //copy meta in context to request
 					meta := res.Metadata
@@ -468,7 +473,7 @@ func (s *Server) serveConn(conn net.Conn) {
 				conn.Write(*data)
 				protocol.PutData(data)
 			}
-			s.Plugins.DoPostWriteResponse(newCtx, req, res, err)
+			s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 
 			protocol.FreeMsg(req)
 			protocol.FreeMsg(res)
@@ -476,22 +481,24 @@ func (s *Server) serveConn(conn net.Conn) {
 	}
 }
 
-func parseServerTimeout(ctx context.Context, req *protocol.Message) (context.Context, context.CancelFunc) {
+func parseServerTimeout(ctx *share.Context, req *protocol.Message) context.CancelFunc {
 	if req == nil || req.Metadata == nil {
-		return ctx, nil
+		return nil
 	}
 
 	st := req.Metadata[share.ServerTimeout]
 	if st == "" {
-		return ctx, nil
+		return nil
 	}
 
 	timeout, err := strconv.ParseInt(st, 10, 64)
 	if err != nil {
-		return ctx, nil
+		return nil
 	}
 
-	return context.WithTimeout(ctx, time.Duration(timeout)*time.Millisecond)
+	newCtx, cancel := context.WithTimeout(ctx.Context, time.Duration(timeout)*time.Millisecond)
+	ctx.Context = newCtx
+	return cancel
 }
 
 func isShutdown(s *Server) bool {
