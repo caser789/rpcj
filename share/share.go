@@ -15,6 +15,9 @@ const (
 	// ServerTimeout timeout value passed from client to control timeout of server
 	ServerTimeout = "__ServerTimeout"
 
+	// ServerAddress is used to get address of the server by client
+	ServerAddress = "__ServerAddress"
+
 	// OpentracingSpanServerKey key in service context
 	OpentracingSpanServerKey = "opentracing_span_server_key"
 	// OpentracingSpanClientKey key in client context

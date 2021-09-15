@@ -336,6 +336,8 @@ func (client *Client) call(ctx context.Context, servicePath, serviceMethod strin
 			for k, v := range call.ResMetadata {
 				resMeta[k] = v
 			}
+
+			resMeta[share.ServerAddress] = client.Conn.RemoteAddr().String()
 		}
 	}
 
@@ -766,7 +768,7 @@ func (client *Client) heartbeat() {
 		}
 
 		if reply != request {
-			log.Warnf("reply %d in heartbeat to %s is different from request %d: %v", reply, client.Conn.RemoteAddr().String(), request)
+			log.Warnf("reply %d in heartbeat to %s is different from request %d", reply, client.Conn.RemoteAddr().String(), request)
 		}
 
 		if abnormal {
