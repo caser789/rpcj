@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/caser789/rpcj/log"
 	"github.com/caser789/rpcj/share"
+	"golang.org/x/net/websocket"
 )
 
 type ConnFactoryFn func(c *Client, network, address string) (net.Conn, error)
@@ -30,6 +32,8 @@ func (c *Client) Connect(network, address string) error {
 	switch network {
 	case "http":
 		conn, err = newDirectHTTPConn(c, network, address)
+	case "ws", "wss":
+		conn, err = newDirectWSConn(c, network, address)
 	case "kcp":
 		conn, err = newDirectKCPConn(c, network, address)
 	case "quic":
@@ -50,18 +54,21 @@ func (c *Client) Connect(network, address string) error {
 			_ = tc.SetKeepAlive(true)
 			_ = tc.SetKeepAlivePeriod(c.option.TCPKeepAlivePeriod)
 		}
+
 		if c.option.IdleTimeout != 0 {
-			conn.SetDeadline(time.Now().Add(c.option.IdleTimeout))
+			_ = conn.SetDeadline(time.Now().Add(c.option.IdleTimeout))
 		}
+
 		if c.Plugins != nil {
 			conn, err = c.Plugins.DoConnCreated(conn)
 			if err != nil {
 				return err
 			}
 		}
+
 		c.Conn = conn
 		c.r = bufio.NewReaderSize(conn, ReaderBuffsize)
-		//c.w = bufio.NewWriterSize(conn, WriterBuffsize)
+		// c.w = bufio.NewWriterSize(conn, WriterBuffsize)
 
 		// start reading and writing since connected
 		go c.input()
@@ -85,7 +92,7 @@ func newDirectConn(c *Client, network, address string) (net.Conn, error) {
 			Timeout: c.option.ConnectTimeout,
 		}
 		tlsConn, err = tls.DialWithDialer(dialer, network, address, c.option.TLSConfig)
-		//or conn:= tls.Client(netConn, &config)
+		// or conn:= tls.Client(netConn, &config)
 		conn = net.Conn(tlsConn)
 	} else {
 		conn, err = net.DialTimeout(network, address, c.option.ConnectTimeout)
@@ -119,7 +126,7 @@ func newDirectHTTPConn(c *Client, network, address string) (net.Conn, error) {
 			Timeout: c.option.ConnectTimeout,
 		}
 		tlsConn, err = tls.DialWithDialer(dialer, "tcp", address, c.option.TLSConfig)
-		//or conn:= tls.Client(netConn, &config)
+		// or conn:= tls.Client(netConn, &config)
 
 		conn = net.Conn(tlsConn)
 	} else {
@@ -130,7 +137,11 @@ func newDirectHTTPConn(c *Client, network, address string) (net.Conn, error) {
 		return nil, err
 	}
 
-	io.WriteString(conn, "CONNECT "+path+" HTTP/1.0\n\n")
+	_, err = io.WriteString(conn, "CONNECT "+path+" HTTP/1.0\n\n")
+	if err != nil {
+		log.Errorf("failed to make CONNECT: %v", err)
+		return nil, err
+	}
 
 	// Require successful HTTP response
 	// before switching to RPC protocol.
@@ -149,4 +160,41 @@ func newDirectHTTPConn(c *Client, network, address string) (net.Conn, error) {
 		Addr: nil,
 		Err:  err,
 	}
+}
+
+func newDirectWSConn(c *Client, network, address string) (net.Conn, error) {
+	if c == nil {
+		return nil, errors.New("empty client")
+	}
+	path := c.option.RPCPath
+	if path == "" {
+		path = share.DefaultRPCPath
+	}
+
+	var conn net.Conn
+	var err error
+
+	// url := "ws://localhost:12345/ws"
+
+	var url, origin string
+	if network == "ws" {
+		url = fmt.Sprintf("ws://%s/%s", address, path)
+		origin = fmt.Sprintf("http://%s", address)
+	} else {
+		url = fmt.Sprintf("wss://%s/%s", address, path)
+		origin = fmt.Sprintf("https://%s", address)
+	}
+
+	if c.option.TLSConfig != nil {
+		config, err := websocket.NewConfig(url, origin)
+		if err != nil {
+			return nil, err
+		}
+		config.TlsConfig = c.option.TLSConfig
+		conn, err = websocket.DialConfig(config)
+	} else {
+		conn, err = websocket.Dial(url, "", origin)
+	}
+
+	return conn, err
 }

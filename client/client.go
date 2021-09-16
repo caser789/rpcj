@@ -87,6 +87,7 @@ type RPCClient interface {
 	Call(ctx context.Context, servicePath, serviceMethod string, args interface{}, reply interface{}) error
 	SendRaw(ctx context.Context, r *protocol.Message) (map[string]string, []byte, error)
 	Close() error
+	RemoteAddr() string
 
 	RegisterServerMessageChan(ch chan<- *protocol.Message)
 	UnregisterServerMessageChan()
@@ -121,6 +122,11 @@ func NewClient(option Option) *Client {
 	return &Client{
 		option: option,
 	}
+}
+
+// RemoteAddr returns the remote address.
+func (c *Client) RemoteAddr() string {
+	return c.Conn.RemoteAddr().String()
 }
 
 // Option contains all options for creating clients.

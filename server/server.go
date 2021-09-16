@@ -25,6 +25,7 @@ import (
 	"github.com/caser789/rpcj/log"
 	"github.com/caser789/rpcj/protocol"
 	"github.com/caser789/rpcj/share"
+	"golang.org/x/net/websocket"
 )
 
 // ErrServerClosed is returned by the Server's Serve, ListenAndServe after a call to Shutdown or Close.
@@ -218,7 +219,10 @@ func (s *Server) Serve(network, address string) (err error) {
 		s.serveByHTTP(ln, "")
 		return nil
 	}
-
+	if network == "ws" || network == "wss" {
+		s.serveByWS(ln, "")
+		return nil
+	}
 	// try to start gateway
 	ln = s.startGateway(network, ln)
 
@@ -301,6 +305,9 @@ func (s *Server) serveListener(ln net.Listener) error {
 		s.mu.Lock()
 		s.activeConn[conn] = struct{}{}
 		s.mu.Unlock()
+		if share.Trace {
+			log.Debug("server accepted an conn%c", conn.RemoteAddr().String())
+		}
 
 		go s.serveConn(conn)
 	}
@@ -314,10 +321,32 @@ func (s *Server) serveByHTTP(ln net.Listener, rpcPath string) {
 	if rpcPath == "" {
 		rpcPath = share.DefaultRPCPath
 	}
-	http.Handle(rpcPath, s)
-	srv := &http.Server{Handler: nil}
+	mux := http.NewServeMux()
+	mux.Handle(rpcPath, s)
+	srv := &http.Server{Handler: mux}
 
 	srv.Serve(ln)
+}
+
+func (s *Server) serveByWS(ln net.Listener, rpcPath string) {
+	s.ln = ln
+
+	if rpcPath == "" {
+		rpcPath = share.DefaultRPCPath
+	}
+	mux := http.NewServeMux()
+	mux.Handle(rpcPath, websocket.Handler(s.ServeWS))
+	srv := &http.Server{Handler: mux}
+
+	srv.Serve(ln)
+}
+
+func (s *Server) ServeWS(conn *websocket.Conn) {
+	s.mu.Lock()
+	s.activeConn[conn] = struct{}{}
+	s.mu.Unlock()
+
+	s.serveConn(conn)
 }
 
 func (s *Server) serveConn(conn net.Conn) {
@@ -331,6 +360,9 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 			buf = buf[:ss]
 			log.Errorf("serving %s panic error: %s, stack:\n %s", conn.RemoteAddr(), err, buf)
+		}
+		if share.Trace {
+			log.Debug("server closed conn: %v", conn.RemoteAddr().String())
 		}
 		s.mu.Lock()
 		delete(s.activeConn, conn)
@@ -389,8 +421,11 @@ func (s *Server) serveConn(conn net.Conn) {
 			conn.SetWriteDeadline(t0.Add(s.writeTimeout))
 		}
 
+		if share.Trace {
+			log.Debug("server received an request %s from conn: %v", req, conn.RemoteAddr().String())
+		}
 		ctx = share.WithLocalValue(ctx, StartRequestContextKey, time.Now().UnixNano())
-		var closeConn = false
+		closeConn := false
 		if !req.IsHeartbeat() {
 			err = s.auth(ctx, req)
 			closeConn = err != nil
@@ -445,6 +480,9 @@ func (s *Server) serveConn(conn net.Conn) {
 
 			s.Plugins.DoPreHandleRequest(ctx, req)
 
+			if share.Trace {
+				log.Debug("server handle request %s from conn: %v", req, conn.RemoteAddr().String())
+			}
 			res, err := s.handleRequest(ctx, req)
 
 			if err != nil {
@@ -475,6 +513,9 @@ func (s *Server) serveConn(conn net.Conn) {
 			}
 			s.Plugins.DoPostWriteResponse(ctx, req, res, err)
 
+			if share.Trace {
+				log.Debug("server write response %v for an request %s from conn: %v", res, req, conn.RemoteAddr().String())
+			}
 			protocol.FreeMsg(req)
 			protocol.FreeMsg(res)
 		}()
