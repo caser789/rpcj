@@ -9,7 +9,7 @@ import (
 	"reflect"
 
 	proto "github.com/gogo/protobuf/proto"
-	"github.com/vmihailenco/msgpack"
+	"github.com/vmihailenco/msgpack/v5"
 	pb "google.golang.org/protobuf/proto"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -130,5 +130,5 @@ func (c ThriftCodec) Decode(data []byte, i interface{}) error {
 		Protocol:  p,
 	}
 	d.Transport.Close()
-	return d.Read(i.(thrift.TStruct), data)
+	return d.Read(context.Background(), i.(thrift.TStruct), data)
 }
