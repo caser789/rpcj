@@ -6,6 +6,7 @@ import (
 
 	"github.com/caser789/rpcj/errors"
 	"github.com/caser789/rpcj/protocol"
+	"github.com/soheilhy/cmux"
 )
 
 //PluginContainer represents a plugin container that defines all methods to manage plugins.
@@ -36,6 +37,7 @@ type PluginContainer interface {
 	DoPostWriteRequest(ctx context.Context, r *protocol.Message, e error) error
 
 	DoHeartbeatRequest(ctx context.Context, req *protocol.Message) error
+	MuxMatch(m cmux.CMux)
 }
 
 // Plugin is the server plugin interface.
@@ -112,6 +114,10 @@ type (
 	// HeartbeatPlugin is .
 	HeartbeatPlugin interface {
 		HeartbeatRequest(ctx context.Context, req *protocol.Message) error
+	}
+
+	CMuxPlugin interface {
+		MuxMatch(m cmux.CMux)
 	}
 )
 
@@ -368,4 +374,13 @@ func (p *pluginContainer) DoHeartbeatRequest(ctx context.Context, r *protocol.Me
 	}
 
 	return nil
+}
+
+// MuxMatch adds cmux Match.
+func (p *pluginContainer) MuxMatch(m cmux.CMux) {
+	for i := range p.plugins {
+		if plugin, ok := p.plugins[i].(CMuxPlugin); ok {
+			plugin.MuxMatch(m)
+		}
+	}
 }
