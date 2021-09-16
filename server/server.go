@@ -95,7 +95,8 @@ type Server struct {
 	// AuthFunc can be used to auth.
 	AuthFunc func(ctx context.Context, req *protocol.Message, token string) error
 
-	handlerMsgNum int32
+	handlerMsgNum      int32
+	HandleServiceError func(error)
 }
 
 // NewServer returns a server.
@@ -486,7 +487,11 @@ func (s *Server) serveConn(conn net.Conn) {
 			res, err := s.handleRequest(ctx, req)
 
 			if err != nil {
-				log.Warnf("rpcx: failed to handle request: %v", err)
+				if s.HandleServiceError != nil {
+					s.HandleServiceError(err)
+				} else {
+					log.Warnf("rpcx: failed to handle request: %v", err)
+				}
 			}
 
 			s.Plugins.DoPreWriteResponse(ctx, req, res, err)

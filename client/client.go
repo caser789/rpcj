@@ -46,7 +46,7 @@ func (e ServiceError) Error() string {
 var DefaultOption = Option{
 	Retries:             3,
 	RPCPath:             share.DefaultRPCPath,
-	ConnectTimeout:      10 * time.Second,
+	ConnectTimeout:      time.Second,
 	SerializeType:       protocol.MsgPack,
 	CompressType:        protocol.None,
 	BackupLatency:       10 * time.Millisecond,
@@ -385,6 +385,14 @@ func (client *Client) SendRaw(ctx context.Context, r *protocol.Message) (map[str
 		call.Metadata = rmeta
 	}
 	r.Metadata = rmeta
+
+	if _, ok := ctx.(*share.Context); !ok {
+		ctx = share.NewContext(ctx)
+	}
+
+	// TODO: should implement as plugin
+	client.injectOpenTracingSpan(ctx, call)
+	client.injectOpenCensusSpan(ctx, call)
 
 	done := make(chan *Call, 10)
 	call.Done = done

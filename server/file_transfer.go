@@ -108,6 +108,9 @@ func (s *FileTransferService) DownloadFile(ctx context.Context, args *share.Down
 		Token: token,
 		Addr:  s.FileTransfer.Addr,
 	}
+	if s.FileTransfer.AdvertiseAddr != "" {
+		reply.Addr = s.FileTransfer.AdvertiseAddr
+	}
 
 	s.FileTransfer.cachedTokens.Add(string(token), &downloadTokenInfo{token, args})
 	return nil

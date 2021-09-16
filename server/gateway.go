@@ -164,14 +164,18 @@ func (s *Server) handleGatewayRequest(w http.ResponseWriter, r *http.Request, pa
 	}
 
 	resMetadata := make(map[string]string)
-	newCtx := context.WithValue(context.WithValue(ctx, share.ReqMetaDataKey, req.Metadata),
+	newCtx := share.WithLocalValue(share.WithLocalValue(ctx, share.ReqMetaDataKey, req.Metadata),
 		share.ResMetaDataKey, resMetadata)
 
 	res, err := s.handleRequest(newCtx, req)
 	defer protocol.FreeMsg(res)
 
 	if err != nil {
-		log.Warnf("rpcx: failed to handle gateway request: %v", err)
+		if s.HandleServiceError != nil {
+			s.HandleServiceError(err)
+		} else {
+			log.Warnf("rpcx:  gateway request: %v", err)
+		}
 		wh.Set(XMessageStatusType, "Error")
 		wh.Set(XErrorMessage, err.Error())
 		w.WriteHeader(500)
